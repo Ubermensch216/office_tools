@@ -45,6 +45,7 @@
             font-weight: 700;
             margin-bottom: 0.25rem;
             letter-spacing: -0.5px;
+            cursor: pointer;
         }
         
         .subtitle {
@@ -610,8 +611,16 @@
             cursor: not-allowed;
         }
         
+        .download-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 300px;
+        }
+        
         .download-btn {
-            padding: 14px 40px;
+            padding: 14px 20px;
             background-color: #f39c12;
             color: white;
             text-decoration: none;
@@ -620,6 +629,7 @@
             font-weight: 600;
             display: none;
             transition: all 0.3s ease;
+            text-align: center;
         }
         
         .download-btn:hover {
@@ -725,8 +735,8 @@
 <body>
     <header class="header">
         <div class="header-content">
-            <h1>문짝</h1>
-            <p class="subtitle">문서를 짝 맞춰주는 프로그램 - 완전 오프라인 문서 병합/분할 도구</p>
+            <h1 id="title">문짝</h1>
+            <p class="subtitle">문서를 짝 맞춰주는 프로그램 - 문서 병합/분할 도구</p>
         </div>
     </header>
     
@@ -866,9 +876,7 @@
                         실행하기
                     </button>
                     
-                    <a id="download-link" class="download-btn" download>
-                        다운로드
-                    </a>
+                    <div class="download-container" id="download-container"></div>
                     
                     <div id="status-message" class="status-message"></div>
                 </div>
@@ -887,12 +895,19 @@
         let currentSplitType = 'range';
         let draggedItem = null;
         let draggedIndex = null;
+        let generatedFiles = [];
         
         // DOM 요소
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
         const executeBtn = document.getElementById('execute-btn');
         const clearBtn = document.getElementById('clear-btn');
+        const titleElement = document.getElementById('title');
+        
+        // 타이틀 클릭 시 새로고침
+        titleElement.addEventListener('click', function() {
+            window.location.reload();
+        });
         
         // 분할 옵션 전환
         function toggleSplitOption(type) {
@@ -1347,8 +1362,43 @@
             updateUI();
             
             // 다운로드 버튼 숨기기
-            document.getElementById('download-link').style.display = 'none';
+            clearDownloadLinks();
             document.getElementById('result-icon').classList.remove('ready');
+        }
+        
+        // 다운로드 링크 초기화
+        function clearDownloadLinks() {
+            const container = document.getElementById('download-container');
+            container.innerHTML = '';
+            generatedFiles = [];
+        }
+        
+        // 다운로드 링크 추가
+        function addDownloadLink(file, filename, mimeType) {
+            const container = document.getElementById('download-container');
+            const blob = file instanceof Blob ? file : new Blob([file], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            
+            // 파일 정보 저장
+            generatedFiles.push({
+                url: url,
+                filename: filename
+            });
+            
+            // 새 링크 생성
+            const link = document.createElement('a');
+            link.className = 'download-btn';
+            link.href = url;
+            link.download = filename;
+            link.textContent = filename;
+            link.style.display = 'block';
+            
+            container.appendChild(link);
+            
+            // 자동 정리
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 60000);
         }
         
         // 탭 전환
@@ -1385,12 +1435,20 @@
             document.getElementById('step-2').classList.add('completed');
             document.getElementById('step-3').classList.add('active');
             
+            // 이전 다운로드 링크 초기화
+            clearDownloadLinks();
+            
             try {
                 if (currentOperation === 'merge') {
                     await mergeFiles();
                 } else {
                     await splitFiles();
                 }
+                
+                // 결과 아이콘 업데이트
+                document.getElementById('result-icon').classList.add('ready');
+                document.getElementById('step-3').classList.add('completed');
+                
             } catch (error) {
                 console.error('작업 실행 오류:', error);
                 showError('작업 실행 실패', error.message || '알 수 없는 오류', '파일을 다시 확인해주세요.');
@@ -1460,7 +1518,8 @@
                 }
                 
                 const pdfBytes = await mergedPdf.save();
-                downloadFile(pdfBytes, `${filename}.pdf`, 'application/pdf');
+                const outputFilename = `${filename}.pdf`;
+                addDownloadLink(pdfBytes, outputFilename, 'application/pdf');
                 showStatus('PDF 병합이 완료되었습니다!', 'success');
             } catch (error) {
                 throw new Error(`PDF 병합 중 오류: ${error.message}`);
@@ -1514,7 +1573,8 @@
             }
             
             const wbout = XLSX.write(mergedWorkbook, { bookType: 'xlsx', type: 'array' });
-            downloadFile(new Uint8Array(wbout), `${filename}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            const outputFilename = `${filename}.xlsx`;
+            addDownloadLink(new Uint8Array(wbout), outputFilename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             showStatus('Excel 파일 병합이 완료되었습니다! (시트 분리)', 'success');
         }
         
@@ -1561,7 +1621,8 @@
             XLSX.utils.book_append_sheet(mergedWorkbook, newSheet, '통합데이터');
             
             const wbout = XLSX.write(mergedWorkbook, { bookType: 'xlsx', type: 'array' });
-            downloadFile(new Uint8Array(wbout), `${filename}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            const outputFilename = `${filename}.xlsx`;
+            addDownloadLink(new Uint8Array(wbout), outputFilename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             showStatus('Excel 파일 병합이 완료되었습니다! (시트 통합)', 'success');
         }
         
@@ -1580,7 +1641,8 @@
                 });
                 
                 const blob = new Blob([mergedContent], { type: 'text/plain;charset=utf-8' });
-                downloadFile(blob, `${filename}.txt`, 'text/plain');
+                const outputFilename = `${filename}.txt`;
+                addDownloadLink(blob, outputFilename, 'text/plain');
                 showStatus('텍스트 파일 병합이 완료되었습니다!', 'success');
             } catch (error) {
                 throw new Error(`텍스트 병합 중 오류: ${error.message}`);
@@ -1649,6 +1711,10 @@
                             showError('분할 불가', fileInfo.type, '이 파일 형식은 분할을 지원하지 않습니다.');
                     }
                 }
+                
+                // 다운로드 안내 메시지
+                showStatus('파일 분할이 완료되었습니다. 다운로드 버튼을 클릭하세요.', 'info');
+                
             } catch (error) {
                 console.error('분할 오류:', error);
                 showError('분할 실패', error.message, '범위나 페이지 분량을 다시 확인해주세요.');
@@ -1680,24 +1746,23 @@
                 
                 const pdfBytes = await newPdf.save();
                 const rangeStr = range.replace(/\s/g, '').replace(/,/g, '_');
-                const filename = fileInfo.name.replace('.pdf', `_pages_${rangeStr}.pdf`);
-                downloadFile(pdfBytes, filename, 'application/pdf');
+                const outputFilename = fileInfo.name.replace('.pdf', `_pages_${rangeStr}.pdf`);
+                addDownloadLink(pdfBytes, outputFilename, 'application/pdf');
                 showStatus(`PDF 분할 완료! (${newPdf.getPageCount()} 페이지)`, 'success');
             } catch (error) {
                 throw new Error(`PDF 분할 중 오류: ${error.message}`);
             }
         }
         
-        // PDF 청크 분할 (추가된 기능)
+        // PDF 청크 분할 (수정된 기능)
         async function splitPDFByChunks(fileInfo, chunkSize) {
             try {
                 if (fileInfo.pageCount === 0) {
                     throw new Error('페이지가 없는 PDF 파일입니다.');
                 }
                 
-                // 페이지 개수 기준으로 청크 분할
+                // 전체 페이지 수를 기준으로 청크 개수 계산
                 const totalChunks = Math.ceil(fileInfo.pageCount / chunkSize);
-                const zipBlobs = [];
                 const fileBase = fileInfo.name.replace('.pdf', '');
                 
                 // 여러 PDF 파일 생성
@@ -1720,25 +1785,13 @@
                     
                     // PDF 저장
                     const pdfBytes = await newPdf.save();
-                    const filename = `${fileBase}_part${i+1}_${startPage}-${endPage}.pdf`;
+                    const outputFilename = `${fileBase}_part${i+1}_${startPage}-${endPage}.pdf`;
                     
-                    // 파일 생성 및 다운로드
-                    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-                    zipBlobs.push({blob, filename});
+                    // 다운로드 링크 추가
+                    addDownloadLink(pdfBytes, outputFilename, 'application/pdf');
                 }
                 
-                // 여러 개의 PDF 파일이 생성된 경우 순차적으로 다운로드
-                if (zipBlobs.length === 1) {
-                    // 파일이 하나만 있을 경우 직접 다운로드
-                    downloadFile(zipBlobs[0].blob, zipBlobs[0].filename, 'application/pdf');
-                } else {
-                    // 여러 파일을 순차적으로 다운로드할 수 있도록 첫 번째 파일만 먼저 다운로드
-                    downloadFile(zipBlobs[0].blob, zipBlobs[0].filename, 'application/pdf');
-                    
-                    // 나머지 파일은 사용자에게 알림
-                    showStatus(`PDF 분할 완료! (총 ${zipBlobs.length}개 파일)<br>
-                               첫 번째 파일이 다운로드됩니다. 추가 파일을 다운로드하려면 다시 실행해주세요.`, 'success');
-                }
+                showStatus(`PDF 분할 완료! (총 ${totalChunks}개 파일)`, 'success');
                 
             } catch (error) {
                 throw new Error(`PDF 청크 분할 중 오류: ${error.message}`);
@@ -1772,24 +1825,23 @@
                 
                 const wbout = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
                 const rangeStr = range.replace(/\s/g, '').replace(/,/g, '_');
-                const filename = fileInfo.name.replace('.xlsx', `_sheets_${rangeStr}.xlsx`);
-                downloadFile(new Uint8Array(wbout), filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                const outputFilename = fileInfo.name.replace('.xlsx', `_sheets_${rangeStr}.xlsx`);
+                addDownloadLink(new Uint8Array(wbout), outputFilename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
                 showStatus(`Excel 분할 완료! (${addedSheets} 시트)`, 'success');
             } catch (error) {
                 throw new Error(`Excel 분할 중 오류: ${error.message}`);
             }
         }
         
-        // XLSX 청크 분할 (추가된 기능)
+        // XLSX 청크 분할 (수정된 기능)
         function splitXLSXByChunks(fileInfo, chunkSize) {
             try {
                 if (fileInfo.sheetCount === 0) {
                     throw new Error('시트가 없는 Excel 파일입니다.');
                 }
                 
-                // 시트 개수 기준으로 청크 분할
+                // 전체 시트 수를 기준으로 청크 개수 계산
                 const totalChunks = Math.ceil(fileInfo.sheetCount / chunkSize);
-                const zipBlobs = [];
                 const fileBase = fileInfo.name.replace('.xlsx', '');
                 
                 // 여러 Excel 파일 생성
@@ -1799,37 +1851,23 @@
                     
                     // 새 워크북 생성
                     const newWorkbook = XLSX.utils.book_new();
-                    let addedSheets = 0;
                     
                     // 시트 범위 복사
                     for (let s = startSheet; s <= endSheet; s++) {
                         const sheetName = fileInfo.sheetNames[s - 1];
                         const sheet = fileInfo.workbook.Sheets[sheetName];
                         XLSX.utils.book_append_sheet(newWorkbook, sheet, sheetName);
-                        addedSheets++;
                     }
                     
                     // Excel 저장
                     const wbout = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
-                    const filename = `${fileBase}_part${i+1}_sheets${startSheet}-${endSheet}.xlsx`;
+                    const outputFilename = `${fileBase}_part${i+1}_sheets${startSheet}-${endSheet}.xlsx`;
                     
-                    // 파일 생성 및 다운로드
-                    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                    zipBlobs.push({blob, filename});
+                    // 다운로드 링크 추가
+                    addDownloadLink(new Uint8Array(wbout), outputFilename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
                 }
                 
-                // 여러 개의 Excel 파일이 생성된 경우 순차적으로 다운로드
-                if (zipBlobs.length === 1) {
-                    // 파일이 하나만 있을 경우 직접 다운로드
-                    downloadFile(zipBlobs[0].blob, zipBlobs[0].filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-                } else {
-                    // 여러 파일을 순차적으로 다운로드할 수 있도록 첫 번째 파일만 먼저 다운로드
-                    downloadFile(zipBlobs[0].blob, zipBlobs[0].filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-                    
-                    // 나머지 파일은 사용자에게 알림
-                    showStatus(`Excel 분할 완료! (총 ${zipBlobs.length}개 파일)<br>
-                               첫 번째 파일이 다운로드됩니다. 추가 파일을 다운로드하려면 다시 실행해주세요.`, 'success');
-                }
+                showStatus(`Excel 분할 완료! (총 ${totalChunks}개 파일)`, 'success');
                 
             } catch (error) {
                 throw new Error(`Excel 청크 분할 중 오류: ${error.message}`);
@@ -1862,24 +1900,23 @@
                 
                 const blob = new Blob([splitContent], { type: 'text/plain;charset=utf-8' });
                 const rangeStr = range.replace(/\s/g, '').replace(/,/g, '_');
-                const filename = fileInfo.name.replace('.txt', `_lines_${rangeStr}.txt`);
-                downloadFile(blob, filename, 'text/plain');
+                const outputFilename = fileInfo.name.replace('.txt', `_lines_${rangeStr}.txt`);
+                addDownloadLink(blob, outputFilename, 'text/plain');
                 showStatus(`텍스트 분할 완료! (${addedLines} 라인)`, 'success');
             } catch (error) {
                 throw new Error(`텍스트 분할 중 오류: ${error.message}`);
             }
         }
         
-        // TXT 청크 분할 (추가된 기능)
+        // TXT 청크 분할 (수정된 기능)
         function splitTXTByChunks(fileInfo, chunkSize) {
             try {
                 if (fileInfo.lineCount === 0) {
                     throw new Error('내용이 없는 텍스트 파일입니다.');
                 }
                 
-                // 라인 개수 기준으로 청크 분할
+                // 전체 라인 수를 기준으로 청크 개수 계산
                 const totalChunks = Math.ceil(fileInfo.lineCount / chunkSize);
-                const zipBlobs = [];
                 const fileBase = fileInfo.name.replace('.txt', '');
                 
                 // 여러 텍스트 파일 생성
@@ -1895,23 +1932,12 @@
                     }
                     
                     // 파일 생성
-                    const filename = `${fileBase}_part${i+1}_lines${startLine}-${endLine}.txt`;
+                    const outputFilename = `${fileBase}_part${i+1}_lines${startLine}-${endLine}.txt`;
                     const blob = new Blob([splitContent], { type: 'text/plain;charset=utf-8' });
-                    zipBlobs.push({blob, filename});
+                    addDownloadLink(blob, outputFilename, 'text/plain');
                 }
                 
-                // 여러 개의 텍스트 파일이 생성된 경우 순차적으로 다운로드
-                if (zipBlobs.length === 1) {
-                    // 파일이 하나만 있을 경우 직접 다운로드
-                    downloadFile(zipBlobs[0].blob, zipBlobs[0].filename, 'text/plain');
-                } else {
-                    // 여러 파일을 순차적으로 다운로드할 수 있도록 첫 번째 파일만 먼저 다운로드
-                    downloadFile(zipBlobs[0].blob, zipBlobs[0].filename, 'text/plain');
-                    
-                    // 나머지 파일은 사용자에게 알림
-                    showStatus(`텍스트 분할 완료! (총 ${zipBlobs.length}개 파일)<br>
-                               첫 번째 파일이 다운로드됩니다. 추가 파일을 다운로드하려면 다시 실행해주세요.`, 'success');
-                }
+                showStatus(`텍스트 분할 완료! (총 ${totalChunks}개 파일)`, 'success');
                 
             } catch (error) {
                 throw new Error(`텍스트 청크 분할 중 오류: ${error.message}`);
@@ -1944,33 +1970,6 @@
             });
             
             return [...new Set(ranges)].sort((a, b) => a - b);
-        }
-        
-        // 파일 다운로드
-        function downloadFile(data, filename, mimeType) {
-            try {
-                const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType });
-                const url = URL.createObjectURL(blob);
-                const downloadLink = document.getElementById('download-link');
-                
-                downloadLink.href = url;
-                downloadLink.download = filename;
-                downloadLink.style.display = 'inline-block';
-                
-                // 결과 아이콘 업데이트
-                document.getElementById('result-icon').classList.add('ready');
-                document.getElementById('step-3').classList.add('completed');
-                
-                // 다운로드 위치 안내 메시지
-                showStatus('파일이 준비되었습니다. 다운로드 버튼을 클릭하세요.<br><small>파일은 브라우저의 기본 다운로드 폴더에 저장됩니다.</small>', 'info');
-                
-                // 자동 정리
-                setTimeout(() => {
-                    URL.revokeObjectURL(url);
-                }, 60000);
-            } catch (error) {
-                showError('다운로드 준비 실패', filename, '파일을 생성할 수 없습니다.');
-            }
         }
         
         // 상태 메시지 표시
