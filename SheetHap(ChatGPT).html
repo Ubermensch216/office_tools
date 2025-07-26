@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>시트합(Sheet合) – 오프라인 엑셀 병합기</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --fg: #111;
+    --bg: #fafafa;
+    --muted: #666;
+    --primary: #2563eb;
+    --border: #e5e7eb;
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #e5e7eb;
+      --bg: #0f172a;
+      --muted: #9ca3af;
+      --border: #1f2937;
+    }
+  }
+  body {
+    margin: 0 auto;
+    max-width: 1200px;
+    padding: 24px;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  h1, h2, h3 {
+    margin: 0 0 12px 0;
+  }
+  h1 { font-size: 1.8rem; }
+  h2 { font-size: 1.2rem; margin-top: 24px; }
+  section {
+    margin-bottom: 24px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    background: rgba(255,255,255,0.02);
+  }
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    text-align: center;
+    color: var(--muted);
+    margin-top: 12px;
+  }
+  .dropzone.dragover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: rgba(37,99,235,0.05);
+  }
+  .files-list {
+    margin-top: 8px;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  button {
+    background: var(--primary);
+    color: #fff;
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.85rem;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 4px 6px;
+    white-space: nowrap;
+  }
+  th {
+    background: rgba(0,0,0,0.05);
+  }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  footer {
+    margin-top: 48px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .chip {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 9999px;
+    background: rgba(0,0,0,0.05);
+    margin-left: 6px;
+    font-size: 0.75rem;
+  }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>시트합(Sheet合) <span class="chip">완전 오프라인 · 단일 HTML</span></h1>
+    <p style="color: var(--muted);">base(template) 엑셀을 불러오고, 각 부서에서 제출한 엑셀들을 합쳐 최종 취합본을 만듭니다. (네트워크 요청 없음)</p>
+  </header>
+
+  <section id="load-base">
+    <h2>1) Base / Template 엑셀 불러오기</h2>
+    <input type="file" id="baseFile" accept=".xlsx,.xlsb,.xlsm,.xls" />
+    <div id="base-drop" class="dropzone">여기로 Base 파일을 드래그 앤 드롭하세요</div>
+    <div id="base-info" class="files-list"></div>
+    <div id="base-preview"></div>
+  </section>
+
+  <section id="load-depts" class="hidden">
+    <h2>2) 담당 부서 엑셀 파일 불러오기 (다중 선택 가능)</h2>
+    <input type="file" id="deptFiles" accept=".xlsx,.xlsb,.xlsm,.xls" multiple />
+    <div id="dept-drop" class="dropzone">여러 개의 부서 파일을 이곳에 드래그 앤 드롭하세요</div>
+    <div id="dept-info" class="files-list"></div>
+  </section>
+
+  <section id="options" class="hidden">
+    <h2>3) 병합 옵션</h2>
+    <label>
+      <input type="checkbox" id="skipHeader" checked />
+      각 부서 파일에서 <b>첫 번째 행을 헤더로 간주하고 제외</b>하고 붙이기
+    </label>
+    <br/>
+    <label>
+      <input type="checkbox" id="matchSheetsByName" checked />
+      동일한 <b>시트명</b>끼리만 병합 (없으면 새 시트로 추가)
+    </label>
+  </section>
+
+  <section id="preview-merged" class="hidden">
+    <h2>4) 미리보기 & 확인</h2>
+    <p style="color: var(--muted);">병합 전 결과를 아래에서 확인하세요.</p>
+    <div id="merged-preview"></div>
+    <div style="margin-top: 12px;">
+      <button id="confirmBtn" disabled>확인(Confirm) 후 다운로드 가능</button>
+    </div>
+  </section>
+
+  <section id="export" class="hidden">
+    <h2>5) 최종 취합본 다운로드</h2>
+    <button id="downloadBtn" disabled>병합본 다운로드 (.xlsx)</button>
+  </section>
+
+  <footer>
+    ⓒ 사하구 기획실 업무혁신계 All Rights Reserved.
+  </footer>
+
+  <!-- =========================
+       SheetJS (xlsx.full.min.js)
+       =========================
+       아래 스크립트는 SheetJS의 오픈소스 버전을 직접 붙여넣어 포함시킨 것입니다.
+       라이선스: Apache-2.0 (https://github.com/SheetJS/sheetjs)
+       버전은 예시로 v0.20.x 기준을 사용했습니다. (필요 시 최신 버전으로 교체하세요)
+       용량이 매우 크므로, 실제 사용 시 아래 주석을 제거하고 전체 minified 코드를 삽입하세요.
+  -->
+  <script>
+  /*
+    === 여기를 SheetJS xlsx.full.min.js 전체 내용으로 대체하세요 ===
+    빌드/다운로드: https://github.com/SheetJS/sheetjs
+  */
+  </script>
+
+  <script>
+  // =========================
+  // 유틸리티
+  // =========================
+  const $ = (sel) => document.querySelector(sel);
+  const byId = (id) => document.getElementById(id);
+
+  function humanFileSize(bytes) {
+    const thresh = 1024;
+    if(Math.abs(bytes) < thresh) return bytes + ' B';
+    const units = ['KB','MB','GB','TB','PB','EB','ZB','YB'];
+    let u = -1;
+    do {
+      bytes /= thresh;
+      ++u;
+    } while(Math.abs(bytes) >= thresh && u < units.length - 1);
+    return bytes.toFixed(1)+' '+units[u];
+  }
+
+  function show(el){ el.classList.remove('hidden'); }
+  function hide(el){ el.classList.add('hidden'); }
+
+  function attachDrop(el, onFiles){
+    el.addEventListener('dragover', e => {
+      e.preventDefault();
+      el.classList.add('dragover');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('dragover'));
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.classList.remove('dragover');
+      const files = Array.from(e.dataTransfer.files || []);
+      if(files.length) onFiles(files);
+    });
+  }
+
+  // =========================
+  // 엑셀 Helper (SheetJS 기반)
+  // =========================
+  function readWorkbookFromFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          resolve(wb);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function sheetTo2DArray(ws, skipHeader) {
+    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+    if(skipHeader && aoa.length) return aoa.slice(1);
+    return aoa;
+  }
+
+  function aoaAppend(targetAoA, sourceAoA) {
+    for(const row of sourceAoA) targetAoA.push(row);
+  }
+
+  function cloneWorkbookStructure(wb) {
+    const out = XLSX.utils.book_new();
+    wb.SheetNames.forEach(name => {
+      const ws = wb.Sheets[name];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+      const newWs = XLSX.utils.aoa_to_sheet(data);
+      XLSX.utils.book_append_sheet(out, newWs, name);
+    });
+    return out;
+  }
+
+  function renderWorkbookPreview(wb, container) {
+    container.innerHTML = '';
+    wb.SheetNames.forEach((name, idx) => {
+      const ws = wb.Sheets[name];
+      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const tbody = document.createElement('tbody');
+
+      if(aoa.length) {
+        const header = aoa[0];
+        const trh = document.createElement('tr');
+        header.forEach(cell => {
+          const th = document.createElement('th');
+          th.textContent = cell == null ? '' : cell;
+          trh.appendChild(th);
+        });
+        thead.appendChild(trh);
+
+        for(let r = 1; r < aoa.length; r++) {
+          const tr = document.createElement('tr');
+          (aoa[r] || []).forEach(cell => {
+            const td = document.createElement('td');
+            td.textContent = cell == null ? '' : cell;
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        }
+      }
+
+      table.appendChild(thead);
+      table.appendChild(tbody);
+
+      const details = document.createElement('details');
+      details.open = idx === 0; // 첫 시트만 기본 open
+      const summary = document.createElement('summary');
+      summary.textContent = `시트: ${name} (행: ${aoa.length})`;
+      details.appendChild(summary);
+      details.appendChild(table);
+      container.appendChild(details);
+    });
+  }
+
+  function mergeWorkbooks(baseWb, deptWbs, { skipHeader = true, matchSheetsByName = true } = {}) {
+    const merged = cloneWorkbookStructure(baseWb);
+    const baseSheetNames = new Set(merged.SheetNames);
+
+    // base 시트의 AOA 맵 (이후 append 용)
+    const baseAoAMap = {};
+    merged.SheetNames.forEach(name => {
+      const ws = merged.Sheets[name];
+      baseAoAMap[name] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+    });
+
+    for(const wb of deptWbs) {
+      wb.SheetNames.forEach(name => {
+        const ws = wb.Sheets[name];
+        const data = sheetTo2DArray(ws, skipHeader);
+        if(matchSheetsByName) {
+          if(baseSheetNames.has(name)) {
+            aoaAppend(baseAoAMap[name], data);
+          } else {
+            // base에 없으면 새 시트로 추가
+            baseAoAMap[name] = data;
+            baseSheetNames.add(name);
+          }
+        } else {
+          // 시트명을 무시하고, base의 첫 시트에 모두 몰아넣기
+          const firstName = merged.SheetNames[0] || name;
+          if(!baseAoAMap[firstName]) baseAoAMap[firstName] = [];
+          aoaAppend(baseAoAMap[firstName], data);
+        }
+      });
+    }
+
+    // AoA를 다시 시트로 변환하여 merged 갱신
+    const finalWb = XLSX.utils.book_new();
+    for(const name of Object.keys(baseAoAMap)) {
+      const aoa = baseAoAMap[name];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      XLSX.utils.book_append_sheet(finalWb, ws, name.substring(0,31));
+    }
+
+    return finalWb;
+  }
+
+  async function exportWorkbook(wb, filename) {
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(url);
+    a.remove();
+  }
+
+  // =========================
+  // 상태 변수
+  // =========================
+  let baseWorkbook = null;
+  let deptWorkbooks = [];
+  let mergedWorkbook = null;
+
+  // =========================
+  // 초기 바인딩
+  // =========================
+  window.addEventListener('DOMContentLoaded', () => {
+    const baseFileInput = byId('baseFile');
+    const deptFilesInput = byId('deptFiles');
+
+    attachDrop(byId('base-drop'), async files => {
+      const f = files[0];
+      await handleBaseFile(f);
+    });
+
+    attachDrop(byId('dept-drop'), async files => {
+      await handleDeptFiles(files);
+    });
+
+    baseFileInput.addEventListener('change', async e => {
+      const f = e.target.files[0];
+      await handleBaseFile(f);
+    });
+
+    deptFilesInput.addEventListener('change', async e => {
+      const fs = Array.from(e.target.files || []);
+      await handleDeptFiles(fs);
+    });
+
+    byId('confirmBtn').addEventListener('click', () => {
+      if(!mergedWorkbook) return;
+      byId('downloadBtn').disabled = false;
+      alert('확인되었습니다. 이제 다운로드 하실 수 있습니다.');
+    });
+
+    byId('downloadBtn').addEventListener('click', async () => {
+      if(!mergedWorkbook) return;
+      await exportWorkbook(mergedWorkbook, `시트합_병합본_${new Date().toISOString().slice(0,10)}.xlsx`);
+    });
+  });
+
+  async function handleBaseFile(file) {
+    if(!file) return;
+    try {
+      byId('base-info').textContent = `${file.name} (${humanFileSize(file.size)})`;
+      baseWorkbook = await readWorkbookFromFile(file);
+      renderWorkbookPreview(baseWorkbook, byId('base-preview'));
+      show(byId('load-depts'));
+      show(byId('options'));
+      show(byId('preview-merged'));
+      show(byId('export'));
+      await attemptPreviewMerge();
+    } catch (err) {
+      console.error(err);
+      alert('Base 파일을 읽는 중 오류가 발생했습니다.');
+    }
+  }
+
+  async function handleDeptFiles(files) {
+    if(!files || !files.length) return;
+    try {
+      byId('dept-info').textContent = files.map(f => `${f.name} (${humanFileSize(f.size)})`).join(', ');
+      deptWorkbooks = [];
+      for(const f of files) {
+        const wb = await readWorkbookFromFile(f);
+        deptWorkbooks.push(wb);
+      }
+      await attemptPreviewMerge();
+    } catch (err) {
+      console.error(err);
+      alert('부서 파일을 읽는 중 오류가 발생했습니다.');
+    }
+  }
+
+  async function attemptPreviewMerge() {
+    const confirmBtn = byId('confirmBtn');
+    confirmBtn.disabled = true;
+    byId('downloadBtn').disabled = true;
+    mergedWorkbook = null;
+
+    if(!baseWorkbook) return;
+
+    const skipHeader = byId('skipHeader')?.checked ?? true;
+    const matchSheetsByName = byId('matchSheetsByName')?.checked ?? true;
+
+    // 옵션 변경 시에도 즉시 갱신될 수 있도록 리스너 부착
+    byId('skipHeader').onchange = attemptPreviewMerge;
+    byId('matchSheetsByName').onchange = attemptPreviewMerge;
+
+    try {
+      mergedWorkbook = mergeWorkbooks(baseWorkbook, deptWorkbooks, { skipHeader, matchSheetsByName });
+      renderWorkbookPreview(mergedWorkbook, byId('merged-preview'));
+      confirmBtn.disabled = false;
+    } catch (err) {
+      console.error(err);
+      alert('미리보기 병합 중 오류가 발생했습니다.');
+    }
+  }
+  </script>
+</body>
+</html>
