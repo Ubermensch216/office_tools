@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>시트합(Sheet合) 프로그램 설명서</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            line-height: 1.6;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .step-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .step-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .highlight-green {
+            background-color: #c6f6d5;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        
+        .highlight-orange {
+            background-color: #feebc8;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        
+        .section-divider {
+            height: 2px;
+            background: linear-gradient(to right, #667eea, #764ba2);
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-4xl mx-auto bg-white shadow-lg">
+        <!-- Header -->
+        <div class="gradient-bg text-white p-8 text-center">
+            <h1 class="text-4xl font-bold mb-4">
+                <i class="fas fa-file-excel mr-3"></i>
+                시트합(Sheet合) 프로그램 설명서
+            </h1>
+            <p class="text-xl opacity-90">엑셀 파일 자동 취합 도구</p>
+        </div>
+
+        <!-- Main Content -->
+        <div class="p-8">
+            <!-- Introduction -->
+            <section class="mb-8">
+                <div class="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-r-lg">
+                    <h2 class="text-2xl font-bold text-blue-800 mb-4">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        프로그램 소개
+                    </h2>
+                    <p class="text-gray-700 text-lg leading-relaxed">
+                        '시트합'은 여러 개의 엑셀 파일에 나뉘어 작성된 데이터를 하나의 기준(Base) 파일에 자동으로 취합해주는 오프라인 도구입니다. 
+                        수작업으로 하던 복사/붙여넣기 작업을 자동화하여 업무 효율을 높이고 실수를 줄일 수 있습니다.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Main Features -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-star mr-2 text-yellow-500"></i>
+                    주요 특징
+                </h2>
+                <div class="grid md:grid-cols-3 gap-6">
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-6">
+                        <div class="text-green-600 text-3xl mb-4">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <h3 class="text-lg font-semibold text-green-800 mb-2">완벽한 오프라인 작동</h3>
+                        <p class="text-gray-700">모든 파일 처리는 사용자 PC에서 직접 이루어집니다. 외부 서버로 파일이 전송되지 않아 보안이 안전합니다.</p>
+                    </div>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                        <div class="text-blue-600 text-3xl mb-4">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <h3 class="text-lg font-semibold text-blue-800 mb-2">간편한 3단계 프로세스</h3>
+                        <p class="text-gray-700">기준 파일 업로드, 취합할 파일 업로드, 취합 및 다운로드의 간단한 과정으로 누구나 쉽게 사용할 수 있습니다.</p>
+                    </div>
+                    <div class="bg-purple-50 border border-purple-200 rounded-lg p-6">
+                        <div class="text-purple-600 text-3xl mb-4">
+                            <i class="fas fa-eye"></i>
+                        </div>
+                        <h3 class="text-lg font-semibold text-purple-800 mb-2">취합 결과 미리보기</h3>
+                        <p class="text-gray-700">최종 파일을 다운로드하기 전에 어떤 셀의 내용이 어떻게 변경되었는지 색상으로 구분하여 직관적으로 확인할 수 있습니다.</p>
+                    </div>
+                </div>
+            </section>
+
+            <div class="section-divider"></div>
+
+            <!-- Usage Steps -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-list-ol mr-2 text-blue-500"></i>
+                    사용 방법
+                </h2>
+
+                <!-- Step 1 -->
+                <div class="step-card bg-white border border-gray-200 rounded-lg p-6 mb-6 shadow-sm">
+                    <div class="flex items-center mb-4">
+                        <div class="bg-blue-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold mr-4">1</div>
+                        <h3 class="text-xl font-semibold text-gray-800">
+                            <i class="fas fa-upload mr-2"></i>
+                            Base(기준) 파일 업로드
+                        </h3>
+                    </div>
+                    <p class="text-gray-700 mb-4">취합된 데이터가 최종적으로 정리될 <strong>'틀'이 되는 엑셀 파일</strong>을 업로드합니다.</p>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <ul class="text-sm text-gray-600 space-y-1">
+                            <li>• 화면 왼쪽 상단의 <code class="bg-gray-200 px-2 py-1 rounded">1. Base(Template) 파일 업로드</code> 영역을 클릭하거나 드래그 앤 드롭</li>
+                            <li>• 업로드 완료 시 파일명, 크기, 시트 개수 등의 정보 표시</li>
+                            <li>• 정상 업로드 시 2단계 영역이 자동으로 활성화</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="step-card bg-white border border-gray-200 rounded-lg p-6 mb-6 shadow-sm">
+                    <div class="flex items-center mb-4">
+                        <div class="bg-green-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold mr-4">2</div>
+                        <h3 class="text-xl font-semibold text-gray-800">
+                            <i class="fas fa-folder-open mr-2"></i>
+                            담당 부서(취합할) 파일 업로드
+                        </h3>
+                    </div>
+                    <p class="text-gray-700 mb-4">기준 파일에 취합할 <strong>'내용'이 담긴 엑셀 파일들</strong>을 업로드합니다.</p>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <ul class="text-sm text-gray-600 space-y-1">
+                            <li>• 화면 오른쪽 상단의 <code class="bg-gray-200 px-2 py-1 rounded">2. 담당 부서 파일 업로드</code> 영역 클릭 또는 드래그 앤 드롭</li>
+                            <li>• 여러 개의 파일을 동시에 선택하여 업로드 가능</li>
+                            <li>• 파일 목록과 진행률 표시줄(Progress Bar) 표시</li>
+                            <li>• 모든 파일 로드 완료 시 <code class="bg-blue-200 px-2 py-1 rounded">취합 시작</code> 버튼 활성화</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="step-card bg-white border border-gray-200 rounded-lg p-6 mb-6 shadow-sm">
+                    <div class="flex items-center mb-4">
+                        <div class="bg-purple-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold mr-4">3</div>
+                        <h3 class="text-xl font-semibold text-gray-800">
+                            <i class="fas fa-cogs mr-2"></i>
+                            취합 시작 및 결과 확인
+                        </h3>
+                    </div>
+                    <p class="text-gray-700 mb-4">업로드된 파일들을 바탕으로 취합 작업을 실행하고, 그 결과를 미리 확인합니다.</p>
+                    <div class="bg-gray-50 p-4 rounded-lg mb-4">
+                        <ul class="text-sm text-gray-600 space-y-1">
+                            <li>• 화면 하단의 <code class="bg-purple-200 px-2 py-1 rounded">취합 시작</code> 버튼 클릭</li>
+                            <li>• 취합 결과가 미리보기 형태로 표시</li>
+                            <li>• 시트가 여러 개일 경우 상단 시트 탭으로 다른 시트 결과 확인</li>
+                            <li>• 하단 통계 정보를 통해 전체 시트 수, 추가/변경된 셀의 개수 확인</li>
+                        </ul>
+                    </div>
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <h4 class="font-semibold text-yellow-800 mb-2">
+                            <i class="fas fa-palette mr-2"></i>
+                            미리보기 색상 구분
+                        </h4>
+                        <div class="space-y-2">
+                            <div class="flex items-center">
+                                <span class="highlight-green mr-3">녹색 셀</span>
+                                <span class="text-sm text-gray-600">기존 Base 파일에서는 비어 있었지만, 부서 파일의 데이터로 새롭게 추가된 값</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="highlight-orange mr-3">주황색 셀</span>
+                                <span class="text-sm text-gray-600">기존 Base 파일에도 값이 있었지만, 부서 파일의 값과 달라 새로운 값으로 변경(덮어쓰기)된 값</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4 -->
+                <div class="step-card bg-white border border-gray-200 rounded-lg p-6 mb-6 shadow-sm">
+                    <div class="flex items-center mb-4">
+                        <div class="bg-orange-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold mr-4">4</div>
+                        <h3 class="text-xl font-semibold text-gray-800">
+                            <i class="fas fa-download mr-2"></i>
+                            취합된 파일 다운로드
+                        </h3>
+                    </div>
+                    <p class="text-gray-700 mb-4">미리보기로 확인한 최종 결과를 하나의 엑셀 파일로 다운로드합니다.</p>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <ul class="text-sm text-gray-600 space-y-1">
+                            <li>• 미리보기 결과 확인 후 <code class="bg-orange-200 px-2 py-1 rounded">파일 다운로드</code> 버튼 클릭</li>
+                            <li>• 취합이 완료된 엑셀 파일(<code>시트합_취합결과_날짜.xlsx</code>)이 사용자 PC에 저장</li>
+                            <li class="text-yellow-600">• <strong>참고:</strong> 다운로드된 최종 파일에는 미리보기의 녹색, 주황색 하이라이트가 포함되지 않음</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <div class="section-divider"></div>
+
+            <!-- Reset Function -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-redo mr-2 text-red-500"></i>
+                    초기화 기능
+                </h2>
+                <div class="bg-red-50 border border-red-200 rounded-lg p-6">
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-exclamation-triangle text-red-500 text-xl mr-3"></i>
+                        <h3 class="text-lg font-semibold text-red-800">모든 작업을 처음부터 다시 시작</h3>
+                    </div>
+                    <p class="text-gray-700">
+                        언제든지 <code class="bg-red-200 px-2 py-1 rounded">초기화</code> 버튼을 누르면 업로드된 모든 파일과 작업 내역이 깨끗하게 지워지고 1단계부터 다시 시작할 수 있습니다.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="mt-12 pt-8 border-t border-gray-200">
+                <div class="text-center text-gray-600">
+                    <p class="mb-2">
+                        <i class="fas fa-shield-alt mr-2"></i>
+                        <strong>보안 안전:</strong> 모든 파일 처리는 사용자 PC에서 직접 이루어집니다.
+                    </p>
+                    <p class="text-sm">
+                        시트합(Sheet合) - 엑셀 파일 자동 취합 도구
+                    </p>
+                </div>
+            </footer>
+        </div>
+    </div>
+</body>
+</html>

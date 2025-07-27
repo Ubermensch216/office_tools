@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>문짝 (Mun-jjak) - 문서 병합/분할 도구 인포그래픽</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        .gradient-text {
+            background: linear-gradient(to right, #00A6ED, #724BB7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .kpi-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .flowchart-step {
+            position: relative;
+            z-index: 10;
+        }
+        .flowchart-line {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            height: 4px;
+            background-color: #e5e7eb;
+            z-index: 1;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 300px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 300px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto px-4 py-12 md:py-20">
+
+        <header class="text-center mb-16">
+            <h1 class="text-4xl md:text-6xl font-black gradient-text mb-4">문짝 (Mun-jjak)</h1>
+            <p class="text-xl md:text-2xl text-gray-600 font-bold">문서 작업, 더 이상 복잡하게 하지 마세요!</p>
+            <p class="mt-2 text-gray-500 max-w-2xl mx-auto">
+                '문짝'은 여러 개의 문서를 합치고 나누는 복잡한 작업을 클릭 몇 번으로 해결하는 가장 간단하고 안전한 방법입니다.
+            </p>
+        </header>
+
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
+            <div class="kpi-card">
+                <div class="text-7xl font-black text-[#00A6ED]">3</div>
+                <h3 class="text-xl font-bold mt-2">지원 파일 형식</h3>
+                <p class="text-gray-500 mt-1">PDF, Excel, TXT</p>
+            </div>
+            <div class="kpi-card">
+                <div class="text-7xl font-black text-[#724BB7]">2</div>
+                <h3 class="text-xl font-bold mt-2">핵심 기능</h3>
+                <p class="text-gray-500 mt-1">파일 병합 & 분할</p>
+            </div>
+            <div class="kpi-card">
+                <div class="text-7xl font-black text-[#F5B82E]">1</div>
+                <h3 class="text-xl font-bold mt-2">단 하나의 도구</h3>
+                <p class="text-gray-500 mt-1">설치 없이 웹에서 바로</p>
+            </div>
+        </section>
+
+        <section class="mb-20">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-extrabold text-gray-900">3단계로 끝내는 초간단 문서 관리</h2>
+                <p class="mt-2 text-gray-500">파일을 올리고, 작업을 선택하고, 다운로드하면 끝입니다.</p>
+            </div>
+            <div class="relative px-4">
+                <div class="flowchart-line w-full -translate-y-1/2"></div>
+                <div class="flex justify-between items-start">
+                    <div class="flowchart-step w-1/3 text-center px-2">
+                        <div class="bg-[#00A6ED] text-white w-20 h-20 rounded-full flex items-center justify-center text-4xl font-bold mx-auto border-4 border-gray-50 shadow-lg">1</div>
+                        <h4 class="text-lg font-bold mt-4">파일 선택</h4>
+                        <p class="text-sm text-gray-500 mt-1">드래그 앤 드롭 또는 파일 선택 버튼으로 문서를 추가하고 순서를 정렬하세요.</p>
+                    </div>
+                    <div class="flowchart-step w-1/3 text-center px-2">
+                        <div class="bg-[#724BB7] text-white w-20 h-20 rounded-full flex items-center justify-center text-4xl font-bold mx-auto border-4 border-gray-50 shadow-lg">2</div>
+                        <h4 class="text-lg font-bold mt-4">작업 선택</h4>
+                        <p class="text-sm text-gray-500 mt-1">병합 또는 분할 작업을 선택하고 파일 유형에 맞는 세부 옵션을 설정하세요.</p>
+                    </div>
+                    <div class="flowchart-step w-1/3 text-center px-2">
+                        <div class="bg-[#F5B82E] text-white w-20 h-20 rounded-full flex items-center justify-center text-4xl font-bold mx-auto border-4 border-gray-50 shadow-lg">3</div>
+                        <h4 class="text-lg font-bold mt-4">실행 및 다운로드</h4>
+                        <p class="text-sm text-gray-500 mt-1">실행 버튼을 누른 후, 완성된 결과 파일을 즉시 다운로드하세요.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-20">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-extrabold text-gray-900">파일 유형별 맞춤 기능</h2>
+                <p class="mt-2 text-gray-500">각 문서 형식의 특성에 맞는 강력한 병합/분할 옵션을 제공합니다.</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="bg-white rounded-lg shadow-md p-6 flex flex-col">
+                    <h3 class="text-2xl font-bold mb-4 text-center text-[#00A6ED]">📄 PDF</h3>
+                    <div class="flex-grow space-y-4">
+                        <div class="bg-blue-50 p-4 rounded-md text-center">
+                            <h4 class="font-bold">병합</h4>
+                            <p class="text-sm text-gray-600">여러 PDF를 지정한 순서대로 하나의 문서로 합칩니다.</p>
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-md text-center">
+                            <h4 class="font-bold">특정 범위 분할</h4>
+                            <p class="text-sm text-gray-600">원하는 페이지만 골라 새 PDF로 추출합니다. (예: 1-3, 5)</p>
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-md text-center">
+                            <h4 class="font-bold">페이지 단위 분할</h4>
+                            <p class="text-sm text-gray-600">지정한 페이지 수만큼 문서를 자동으로 나눕니다.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 flex flex-col">
+                    <h3 class="text-2xl font-bold mb-4 text-center text-[#724BB7]">📊 Excel</h3>
+                    <div class="flex-grow space-y-4">
+                        <div class="bg-purple-50 p-4 rounded-md">
+                            <h4 class="font-bold text-center">병합 옵션</h4>
+                            <div class="chart-container">
+                                <canvas id="excelMergeChart"></canvas>
+                            </div>
+                            <p class="text-xs text-center text-gray-600">여러 Excel 파일을 시트 분리 또는 시트 통합 방식으로 병합할 수 있습니다.</p>
+                        </div>
+                        <div class="bg-purple-50 p-4 rounded-md text-center">
+                            <h4 class="font-bold">Sheet/행 단위 분할</h4>
+                            <p class="text-sm text-gray-600">각 시트를 개별 파일로 만들거나, 지정한 행 수로 파일을 나눕니다.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 flex flex-col">
+                    <h3 class="text-2xl font-bold mb-4 text-center text-[#F5B82E]">📝 텍스트</h3>
+                     <div class="flex-grow space-y-4">
+                        <div class="bg-yellow-50 p-4 rounded-md text-center">
+                            <h4 class="font-bold">병합</h4>
+                            <p class="text-sm text-gray-600">여러 텍스트 파일을 하나의 파일로 합칩니다.</p>
+                        </div>
+                        <div class="bg-yellow-50 p-4 rounded-md text-center">
+                            <h4 class="font-bold">특정 범위 분할</h4>
+                            <p class="text-sm text-gray-600">원하는 라인(줄) 번호만 추출하여 새 파일로 만듭니다.</p>
+                        </div>
+                        <div class="bg-yellow-50 p-4 rounded-md text-center">
+                            <h4 class="font-bold">라인 단위 분할</h4>
+                            <p class="text-sm text-gray-600">지정한 라인 수만큼 파일을 자동으로 나눕니다.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-extrabold text-gray-900">'문짝'을 선택해야 하는 이유</h2>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                <div class="bg-white rounded-lg shadow-md p-6 flex items-center">
+                    <div class="text-5xl mr-6">💻</div>
+                    <div>
+                        <h4 class="text-xl font-bold">설치 불필요</h4>
+                        <p class="text-gray-600">별도의 프로그램 설치 없이 어떤 PC에서든 웹 브라우저로 바로 사용 가능합니다.</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 flex items-center">
+                    <div class="text-5xl mr-6">🔒</div>
+                    <div>
+                        <h4 class="text-xl font-bold">강력한 보안</h4>
+                        <p class="text-gray-600">모든 작업은 사용자 PC에서 직접 처리됩니다. 파일이 외부 서버로 전송되지 않아 안전합니다.</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 flex items-center">
+                    <div class="text-5xl mr-6">✨</div>
+                    <div>
+                        <h4 class="text-xl font-bold">직관적인 사용법</h4>
+                        <p class="text-gray-600">드래그 앤 드롭을 지원하여 누구나 쉽게 파일을 관리하고 작업을 수행할 수 있습니다.</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 flex items-center">
+                    <div class="text-5xl mr-6">👍</div>
+                    <div>
+                        <h4 class="text-xl font-bold">완전 무료</h4>
+                        <p class="text-gray-600">모든 기능은 제한 없이 무료로 제공되어 업무 효율을 높여줍니다.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <footer class="text-center py-8 bg-gray-800 text-white">
+        <p>ⓒ 사하구 기획실 업무혁신계</p>
+    </footer>
+
+    <script>
+        const excelMergeCtx = document.getElementById('excelMergeChart').getContext('2d');
+        const excelMergeChart = new Chart(excelMergeCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['시트 분리 유지', '하나의 시트로 통합'],
+                datasets: [{
+                    label: 'Excel 병합 옵션',
+                    data: [50, 50],
+                    backgroundColor: [
+                        '#724BB7',
+                        '#00A6ED'
+                    ],
+                    borderColor: [
+                        '#FFFFFF'
+                    ],
+                    borderWidth: 4,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            font: {
+                                family: "'Noto Sans KR', sans-serif"
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            title: function(tooltipItems) {
+                                const item = tooltipItems[0];
+                                let label = item.chart.data.labels[item.dataIndex];
+                                if (Array.isArray(label)) {
+                                  return label.join(' ');
+                                } else {
+                                  return label;
+                                }
+                            }
+                        }
+                    }
+                },
+                cutout: '60%'
+            }
+        });
+    </script>
+
+</body>
+</html>

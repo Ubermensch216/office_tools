@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>시트합(Sheet合) - 엑셀 파일 취합 도구</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4b6cb7 0%, #182848 100%);
+            color: white;
+            padding: 0.8rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            height: 50px;
+        }
+        
+        .header h1 {
+            font-size: 1.6rem;
+            font-weight: 600;
+        }
+        
+        .header p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .main-container {
+            margin-top: 50px;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 90px);
+            padding: 0.5rem;
+        }
+        
+        .upload-area {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .upload-section {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: 1rem;
+            height: auto;
+            max-height: 320px;
+            overflow: auto;
+        }
+        
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+            color: #4a5568;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .step-number {
+            background: #4b6cb7;
+            color: white;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .upload-layout {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .file-upload {
+            flex: 1;
+            border: 2px dashed #cbd5e0;
+            border-radius: 6px;
+            padding: 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            background: white;
+            height: 180px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .file-upload:hover {
+            border-color: #4b6cb7;
+            background-color: #f7fafc;
+        }
+        
+        .file-upload.dragover {
+            border-color: #4b6cb7;
+            background-color: #ebf4ff;
+        }
+        
+        .file-upload input[type="file"] {
+            display: none;
+        }
+        
+        .file-upload-icon {
+            font-size: 2rem;
+            color: #a0aec0;
+            margin-bottom: 0.8rem;
+        }
+        
+        .file-info {
+            flex: 1;
+            background: #f7fafc;
+            padding: 1rem;
+            border-radius: 6px;
+            margin: 0;
+            display: none;
+            height: 180px;
+            overflow: auto;
+        }
+        
+        .file-info.show {
+            display: block;
+        }
+        
+        .preview-area {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .sheet-tabs {
+            display: flex;
+            gap: 0.25rem;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            overflow-x: auto;
+            flex-shrink: 0;
+        }
+        
+        .sheet-tab {
+            padding: 0.4rem 0.8rem;
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        
+        .sheet-tab:hover {
+            background: #e2e8f0;
+        }
+        
+        .sheet-tab.active {
+            background: white;
+            border-color: #4b6cb7;
+            color: #4b6cb7;
+            font-weight: 600;
+        }
+        
+        .sheet-content {
+            flex: 1;
+            overflow: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 0 0 4px 4px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 0.5rem;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #f7fafc;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        tr:hover {
+            background-color: #f7fafc;
+        }
+        
+        .button {
+            background: #4b6cb7;
+            color: white;
+            border: none;
+            padding: 0.6rem 1rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .button:hover {
+            background: #3b5998;
+            box-shadow: 0 2px 10px rgba(75, 108, 183, 0.3);
+        }
+        
+        .button:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        .button.secondary {
+            background: #4a5568;
+        }
+        
+        .button.secondary:hover {
+            background: #2d3748;
+        }
+        
+        .button.success {
+            background: #48bb78;
+        }
+        
+        .button.success:hover {
+            background: #38a169;
+        }
+        
+        .department-files {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        
+        .department-file {
+            background: white;
+            padding: 0.6rem;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+            text-align: center;
+            font-size: 0.75rem;
+        }
+        
+        .department-file.processed {
+            border-color: #48bb78;
+            background: #f0fff4;
+        }
+        
+        .footer {
+            background: #2d3748;
+            color: white;
+            text-align: center;
+            padding: 0.8rem;
+            font-size: 0.8rem;
+            height: 40px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 0.75rem;
+            display: none;
+        }
+        
+        .progress-bar.show {
+            display: block;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #4b6cb7;
+            transition: width 0.3s;
+            width: 0%;
+        }
+        
+        .status-message {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            display: none;
+            font-size: 0.8rem;
+        }
+        
+        .status-message.show {
+            display: block;
+        }
+        
+        .status-message.success {
+            background: #f0fff4;
+            color: #276749;
+            border: 1px solid #9ae6b4;
+        }
+        
+        .status-message.error {
+            background: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+        
+        .status-message.info {
+            background: #ebf8ff;
+            color: #2c5282;
+            border: 1px solid #90cdf4;
+        }
+        
+        .merge-info {
+            background: #f7fafc;
+            padding: 0.8rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+        
+        .merge-stats {
+            display: flex;
+            gap: 0.75rem;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 0.5rem 0.75rem;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+            min-width: 90px;
+        }
+        
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #4b6cb7;
+        }
+        
+        .stat-label {
+            font-size: 0.7rem;
+            color: #718096;
+            margin-top: 0.25rem;
+        }
+
+        td.updated {
+            background-color: #c6f6d5 !important;
+            color: #276749 !important;
+            font-weight: 600;
+        }
+
+        td.different {
+            background-color: #feebc8 !important;
+            color: #9c4221 !important;
+            font-weight: 600;
+        }
+
+        .legend {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-size: 0.8rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 3px;
+        }
+        
+        .sheet-info {
+            font-size: 0.8rem;
+            color: #718096;
+            margin-left: 0.5rem;
+        }
+
+        .loading-message {
+            text-align: center;
+            padding: 2rem;
+            color: #718096;
+        }
+        
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4b6cb7;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.8rem;
+        }
+        
+        .preview-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #4a5568;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .preview-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #a0aec0;
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .preview-placeholder-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+        
+        .highlight-legend {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem;
+            background: #fafafa;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+        
+        .preview-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .preview-footer {
+            margin-top: auto;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 0.5rem;
+        }
+    </style>
+    
+    <!-- SheetJS 라이브러리 CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="header">
+        <h1>시트합(Sheet合) - 엑셀 파일 취합 도구</h1>
+        <p>오프라인 버전</p>
+    </div>
+    
+    <div class="main-container">
+        <div class="upload-area">
+            <!-- Step 1: Base Template Upload -->
+            <div class="upload-section">
+                <h2 class="section-title">
+                    <span class="step-number">1</span>
+                    Base(Template) 파일 업로드
+                </h2>
+                <div class="upload-layout">
+                    <div class="file-upload" id="baseUpload" onclick="document.getElementById('baseFile').click()">
+                        <div class="file-upload-icon">📊</div>
+                        <p>Base 파일을 선택하거나 드래그</p>
+                        <p style="font-size: 0.75rem; color: #718096; margin-top: 0.5rem;">.xlsx, .xls</p>
+                        <input type="file" id="baseFile" accept=".xlsx,.xls">
+                    </div>
+                    <div class="file-info" id="baseFileInfo"></div>
+                </div>
+                <div class="status-message" id="baseStatusMessage"></div>
+            </div>
+            
+            <!-- Step 2: Department Files Upload -->
+            <div class="upload-section" id="step2Section" style="display: none;">
+                <h2 class="section-title">
+                    <span class="step-number">2</span>
+                    담당 부서 파일 업로드
+                </h2>
+                <div class="upload-layout">
+                    <div class="file-upload" id="deptUpload" onclick="document.getElementById('deptFiles').click()">
+                        <div class="file-upload-icon">📁</div>
+                        <p>부서 파일을 선택하거나 드래그</p>
+                        <p style="font-size: 0.75rem; color: #718096; margin-top: 0.5rem;">여러 파일 선택 가능</p>
+                        <input type="file" id="deptFiles" accept=".xlsx,.xls" multiple>
+                    </div>
+                    <div class="file-info" id="deptFileInfo">
+                        <div class="department-files" id="departmentFilesList"></div>
+                        <div class="progress-bar" id="progressBar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="status-message" id="deptStatusMessage"></div>
+            </div>
+        </div>
+        
+        <!-- Step 3: Preview and Download -->
+        <div class="preview-area" id="previewArea">
+            <div class="preview-header">
+                <h2 class="preview-title">
+                    <span class="step-number">3</span>
+                    취합 결과 미리보기
+                </h2>
+                <div class="action-buttons">
+                    <button class="button" id="mergeButton" onclick="performMerge()" disabled>
+                        취합 시작
+                    </button>
+                    <button class="button success" id="downloadButton" onclick="downloadMergedFile()" disabled>
+                        파일 다운로드
+                    </button>
+                    <button class="button secondary" onclick="resetAll()">
+                        초기화
+                    </button>
+                </div>
+            </div>
+            
+            <div id="previewPlaceholder" class="preview-placeholder">
+                <div class="preview-placeholder-icon">📈</div>
+                <p>Base 파일과 부서 파일을 업로드한 후<br>취합 시작 버튼을 클릭하면 결과를 이곳에 표시합니다.</p>
+            </div>
+            
+            <div id="mergePreviewContent" style="display: none; height: 100%;"></div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        ⓒ 사하구 기획실 업무혁신계 All Rights Reserved.
+    </div>
+    
+    <script>
+        // Global variables
+        let baseWorkbook = null;
+        let baseFileName = '';
+        let departmentWorkbooks = [];
+        let mergedWorkbook = null;
+        let mergeStats = {
+            totalSheets: 0,
+            totalCells: 0,
+            updatedCells: 0,    // 부서 파일에만 있는 값을 추가
+            changedCells: 0,    // 부서 파일과 Base 파일이 다른 경우
+            preservedCells: 0   // Base 파일 내용 유지
+        };
+        
+        // Initialize drag and drop
+        function initializeDragDrop() {
+            const baseUpload = document.getElementById('baseUpload');
+            const deptUpload = document.getElementById('deptUpload');
+            
+            [baseUpload, deptUpload].forEach(element => {
+                if (!element) return;
+                
+                element.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    element.classList.add('dragover');
+                });
+                
+                element.addEventListener('dragleave', () => {
+                    element.classList.remove('dragover');
+                });
+                
+                element.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    element.classList.remove('dragover');
+                    
+                    const files = e.dataTransfer.files;
+                    if (element.id === 'baseUpload') {
+                        handleBaseFile(files[0]);
+                    } else {
+                        handleDepartmentFiles(files);
+                    }
+                });
+            });
+        }
+        
+        // File input handlers
+        document.getElementById('baseFile').addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleBaseFile(e.target.files[0]);
+            }
+        });
+        
+        document.getElementById('deptFiles').addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleDepartmentFiles(e.target.files);
+            }
+        });
+        
+        // Handle base file upload
+        function handleBaseFile(file) {
+            if (!file) return;
+            
+            baseFileName = file.name;
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    baseWorkbook = XLSX.read(data, {
+                        type: 'array',
+                        cellStyles: true,
+                        cellNF: true,
+                        cellDates: true
+                    });
+                    
+                    // Show file info
+                    const fileInfo = document.getElementById('baseFileInfo');
+                    fileInfo.innerHTML = `
+                        <strong>파일명:</strong> ${file.name}<br>
+                        <strong>크기:</strong> ${(file.size / 1024).toFixed(2)} KB<br>
+                        <strong>시트 수:</strong> ${baseWorkbook.SheetNames.length}개<br>
+                        <strong>시트명:</strong><br>${baseWorkbook.SheetNames.join(', ')}
+                    `;
+                    fileInfo.classList.add('show');
+                    
+                    // Show step 2
+                    document.getElementById('step2Section').style.display = 'block';
+                    document.getElementById('deptFileInfo').classList.add('show');
+                    
+                    showStatusMessage('Base 파일이 성공적으로 로드되었습니다.', 'success', 'baseStatusMessage');
+                } catch (error) {
+                    showStatusMessage('파일 읽기 중 오류가 발생했습니다: ' + error.message, 'error', 'baseStatusMessage');
+                    console.error('Base file read error:', error);
+                }
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+        
+        // Handle department files upload
+        function handleDepartmentFiles(files) {
+            if (!files || files.length === 0) return;
+            
+            const filesList = document.getElementById('departmentFilesList');
+            filesList.innerHTML = '';
+            departmentWorkbooks = [];
+            
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            progressBar.classList.add('show');
+            
+            let processed = 0;
+            const total = files.length;
+            
+            Array.from(files).forEach((file, index) => {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const wb = XLSX.read(data, {
+                            type: 'array',
+                            cellStyles: true,
+                            cellNF: true,
+                            cellDates: true
+                        });
+                        
+                        departmentWorkbooks.push({
+                            name: file.name,
+                            workbook: wb
+                        });
+                        
+                        // Add to list
+                        const fileDiv = document.createElement('div');
+                        fileDiv.className = 'department-file processed';
+                        fileDiv.innerHTML = `
+                            <div style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${file.name}</div>
+                            <div style="font-size: 0.7rem; color: #718096;">${wb.SheetNames.length}개 시트</div>
+                        `;
+                        filesList.appendChild(fileDiv);
+                        
+                        processed++;
+                        progressFill.style.width = `${(processed / total) * 100}%`;
+                        
+                        if (processed === total) {
+                            setTimeout(() => {
+                                progressBar.classList.remove('show');
+                                document.getElementById('mergeButton').disabled = false;
+                                showStatusMessage(`${total}개의 부서 파일이 성공적으로 로드되었습니다.`, 'success', 'deptStatusMessage');
+                            }, 500);
+                        }
+                    } catch (error) {
+                        showStatusMessage(`${file.name} 파일 읽기 중 오류가 발생했습니다: ${error.message}`, 'error', 'deptStatusMessage');
+                        console.error('Department file read error:', error);
+                    }
+                };
+                
+                reader.readAsArrayBuffer(file);
+            });
+        }
+        
+        // Create sheet tabs for preview
+        function createSheetTabs(workbook, containerId) {
+            const container = document.getElementById(containerId);
+            
+            const tabsHtml = workbook.SheetNames.map((name, index) => 
+                `<div class="sheet-tab ${index === 0 ? 'active' : ''}" onclick="switchSheet(${index})">${name}</div>`
+            ).join('');
+            
+            container.innerHTML = `
+                <div class="preview-container">
+                    <div class="sheet-tabs">${tabsHtml}</div>
+                    <div class="sheet-content" id="sheetContent"></div>
+                    
+                    <div class="preview-footer">
+                        <div class="merge-info">
+                            <div>
+                                <strong>취합 결과</strong>
+                            </div>
+                            <div class="merge-stats">
+                                <div class="stat-item">
+                                    <div class="stat-value">${mergeStats.totalSheets}</div>
+                                    <div class="stat-label">처리된 시트</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-value">${mergeStats.updatedCells}</div>
+                                    <div class="stat-label">추가된 값</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-value">${mergeStats.changedCells}</div>
+                                    <div class="stat-label">변경된 값</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-value">${mergeStats.preservedCells}</div>
+                                    <div class="stat-label">유지된 셀</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="highlight-legend">
+                            <div class="legend-item">
+                                <div class="legend-color" style="background-color: #c6f6d5;"></div>
+                                <span>부서 파일에서 추가된 셀</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background-color: #feebc8;"></div>
+                                <span>부서 파일에서 변경된 셀</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Show first sheet
+            showSheetContent(workbook.SheetNames[0]);
+        }
+        
+        // Switch between sheets
+        function switchSheet(index) {
+            const tabs = document.querySelectorAll('.sheet-tab');
+            tabs.forEach((tab, i) => {
+                tab.classList.toggle('active', i === index);
+            });
+            
+            const sheetName = mergedWorkbook.SheetNames[index];
+            showSheetContent(sheetName);
+        }
+        
+        // Show sheet content
+        function showSheetContent(sheetName) {
+            const content = document.getElementById('sheetContent');
+            content.innerHTML = '<div class="loading-message"><div class="loader"></div>처리 중...</div>';
+            
+            setTimeout(() => {
+                const sheet = mergedWorkbook.Sheets[sheetName];
+                let html = XLSX.utils.sheet_to_html(sheet, {
+                    editable: false
+                });
+                
+                // 셀 업데이트 표시 (추가 및 변경)
+                if (sheet._updatedCells || sheet._changedCells) {
+                    // Parse HTML
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    
+                    // 추가된 셀 표시
+                    if (sheet._updatedCells) {
+                        sheet._updatedCells.forEach(cellRef => {
+                            const cellAddress = cellRef.replace(/[0-9]/g, '').toLowerCase() + cellRef.replace(/[^0-9]/g, '');
+                            const cells = doc.querySelectorAll(`td[data-addr="${cellAddress}"], td[data-cell="${cellRef}"]`);
+                            
+                            cells.forEach(cell => {
+                                cell.classList.add('updated');
+                            });
+                        });
+                    }
+                    
+                    // 변경된 셀 표시
+                    if (sheet._changedCells) {
+                        sheet._changedCells.forEach(cellRef => {
+                            const cellAddress = cellRef.replace(/[0-9]/g, '').toLowerCase() + cellRef.replace(/[^0-9]/g, '');
+                            const cells = doc.querySelectorAll(`td[data-addr="${cellAddress}"], td[data-cell="${cellRef}"]`);
+                            
+                            cells.forEach(cell => {
+                                cell.classList.add('different');
+                            });
+                        });
+                    }
+                    
+                    html = doc.body.innerHTML;
+                }
+                
+                content.innerHTML = html;
+                
+                // Apply custom styling to updated cells if the XLSX HTML output doesn't support data attributes
+                const table = content.querySelector('table');
+                if (table) {
+                    const rows = table.querySelectorAll('tr');
+                    
+                    // 추가된 셀 스타일 적용
+                    if (sheet._updatedCells) {
+                        sheet._updatedCells.forEach(cellRef => {
+                            highlightCell(rows, cellRef, 'updated');
+                        });
+                    }
+                    
+                    // 변경된 셀 스타일 적용
+                    if (sheet._changedCells) {
+                        sheet._changedCells.forEach(cellRef => {
+                            highlightCell(rows, cellRef, 'different');
+                        });
+                    }
+                }
+            }, 10);
+        }
+        
+        // Highlight cell in the table
+        function highlightCell(rows, cellRef, className) {
+            const colLetter = cellRef.replace(/[0-9]/g, '');
+            const rowNum = parseInt(cellRef.replace(/[^0-9]/g, ''));
+            
+            if (rowNum > 0 && rows.length > rowNum) {
+                const row = rows[rowNum];
+                const cells = row.querySelectorAll('td');
+                const colIndex = colLetterToIndex(colLetter);
+                
+                if (colIndex >= 0 && cells.length > colIndex) {
+                    cells[colIndex].classList.add(className);
+                }
+            }
+        }
+        
+        // Convert column letter to index
+        function colLetterToIndex(colLetter) {
+            colLetter = colLetter.toUpperCase();
+            let result = 0;
+            for (let i = 0; i < colLetter.length; i++) {
+                result = result * 26 + (colLetter.charCodeAt(i) - 64);
+            }
+            return result - 1; // 0-based index
+        }
+        
+        // Deep clone workbook
+        function cloneWorkbook(wb) {
+            const newWb = XLSX.utils.book_new();
+            
+            wb.SheetNames.forEach(sheetName => {
+                const sheet = wb.Sheets[sheetName];
+                const newSheet = {};
+                
+                // Copy all properties including formatting
+                Object.keys(sheet).forEach(key => {
+                    if (typeof sheet[key] === 'object' && sheet[key] !== null) {
+                        newSheet[key] = JSON.parse(JSON.stringify(sheet[key]));
+                    } else {
+                        newSheet[key] = sheet[key];
+                    }
+                });
+                
+                XLSX.utils.book_append_sheet(newWb, newSheet, sheetName);
+            });
+            
+            // Copy workbook properties
+            if (wb.Props) newWb.Props = {...wb.Props};
+            if (wb.Custprops) newWb.Custprops = {...wb.Custprops};
+            
+            return newWb;
+        }
+        
+        // Merge data into base workbook
+        function mergeIntoBase() {
+            mergeStats = {
+                totalSheets: 0,
+                totalCells: 0,
+                updatedCells: 0,
+                changedCells: 0,
+                preservedCells: 0
+            };
+            
+            // Create a deep clone of base workbook to preserve original
+            mergedWorkbook = cloneWorkbook(baseWorkbook);
+            
+            // Process each sheet in base workbook
+            mergedWorkbook.SheetNames.forEach(sheetName => {
+                const mergedSheet = mergedWorkbook.Sheets[sheetName];
+                mergeStats.totalSheets++;
+                
+                // Track updated cells and changed cells for this sheet
+                mergedSheet._updatedCells = [];
+                mergedSheet._changedCells = [];
+                
+                // Get range of base sheet
+                if (!mergedSheet['!ref']) return; // Skip if sheet has no range
+                
+                const range = XLSX.utils.decode_range(mergedSheet['!ref']);
+                
+                // First, scan base workbook cells to count them and mark as preserved
+                for (let R = range.s.r; R <= range.e.r; ++R) {
+                    for (let C = range.s.c; C <= range.e.c; ++C) {
+                        const cellAddress = XLSX.utils.encode_cell({c: C, r: R});
+                        mergeStats.totalCells++;
+                        
+                        const baseCell = mergedSheet[cellAddress];
+                        if (baseCell && baseCell.v !== undefined && baseCell.v !== '' && baseCell.v !== null) {
+                            mergeStats.preservedCells++;
+                        }
+                    }
+                }
+                
+                // Now, process each department workbook
+                for (const deptWb of departmentWorkbooks) {
+                    // Check if department workbook has this sheet
+                    if (deptWb.workbook.SheetNames.includes(sheetName)) {
+                        const deptSheet = deptWb.workbook.Sheets[sheetName];
+                        
+                        // Skip if department sheet has no range
+                        if (!deptSheet['!ref']) continue;
+                        
+                        const deptRange = XLSX.utils.decode_range(deptSheet['!ref']);
+                        
+                        // Expand the merged sheet range if department sheet is larger
+                        if (deptRange.e.r > range.e.r || deptRange.e.c > range.e.c) {
+                            const newRange = {
+                                s: { r: Math.min(range.s.r, deptRange.s.r), c: Math.min(range.s.c, deptRange.s.c) },
+                                e: { r: Math.max(range.e.r, deptRange.e.r), c: Math.max(range.e.c, deptRange.e.c) }
+                            };
+                            mergedSheet['!ref'] = XLSX.utils.encode_range(newRange);
+                            
+                            // Update our working range
+                            range.e.r = newRange.e.r;
+                            range.e.c = newRange.e.c;
+                        }
+                        
+                        // Process each cell in the department sheet
+                        for (let R = deptRange.s.r; R <= deptRange.e.r; ++R) {
+                            for (let C = deptRange.s.c; C <= deptRange.e.c; ++C) {
+                                const cellAddress = XLSX.utils.encode_cell({c: C, r: R});
+                                const deptCell = deptSheet[cellAddress];
+                                
+                                // Skip empty cells in department sheet
+                                if (!deptCell || deptCell.v === undefined || deptCell.v === '' || deptCell.v === null) {
+                                    continue;
+                                }
+                                
+                                const baseCell = mergedSheet[cellAddress];
+                                
+                                // Case 1: Cell doesn't exist in base or is empty - add new value
+                                if (!baseCell || baseCell.v === undefined || baseCell.v === '' || baseCell.v === null || baseCell.v === 0) {
+                                    if (!baseCell) {
+                                        mergedSheet[cellAddress] = {
+                                            v: deptCell.v,
+                                            t: deptCell.t || 's',
+                                            w: deptCell.w
+                                        };
+                                    } else {
+                                        // Update the existing cell with the new value
+                                        mergedSheet[cellAddress].v = deptCell.v;
+                                        if (deptCell.w) mergedSheet[cellAddress].w = deptCell.w;
+                                        if (deptCell.t) mergedSheet[cellAddress].t = deptCell.t;
+                                    }
+                                    
+                                    // Count this as a new cell and mark it
+                                    mergedSheet._updatedCells.push(cellAddress);
+                                    mergeStats.updatedCells++;
+                                    
+                                    // If we previously counted this as preserved, adjust the count
+                                    if (baseCell && baseCell.v !== undefined && baseCell.v !== '' && baseCell.v !== null) {
+                                        mergeStats.preservedCells--;
+                                    }
+                                }
+                                // Case 2: Cell exists in base and has a different value - update with department value
+                                else if (baseCell.v.toString() !== deptCell.v.toString()) {
+                                    // Update with department value
+                                    mergedSheet[cellAddress].v = deptCell.v;
+                                    if (deptCell.w) mergedSheet[cellAddress].w = deptCell.w;
+                                    if (deptCell.t) mergedSheet[cellAddress].t = deptCell.t;
+                                    
+                                    // Count this as a changed cell and mark it
+                                    mergedSheet._changedCells.push(cellAddress);
+                                    mergeStats.changedCells++;
+                                    
+                                    // If we previously counted this as preserved, adjust the count
+                                    mergeStats.preservedCells--;
+                                }
+                                // Case 3: Cell exists in base with same value - already preserved, no action needed
+                            }
+                        }
+                    }
+                }
+                
+                // Update total cells count in case we expanded the range
+                mergeStats.totalCells = 0;
+                const finalRange = XLSX.utils.decode_range(mergedSheet['!ref']);
+                for (let R = finalRange.s.r; R <= finalRange.e.r; ++R) {
+                    for (let C = finalRange.s.c; C <= finalRange.e.c; ++C) {
+                        mergeStats.totalCells++;
+                    }
+                }
+            });
+            
+            return mergedWorkbook;
+        }
+        
+        // Perform merge and show result
+        function performMerge() {
+            if (!baseWorkbook || departmentWorkbooks.length === 0) {
+                showStatusMessage('먼저 파일들을 업로드해주세요.', 'error', 'deptStatusMessage');
+                return;
+            }
+            
+            // Hide placeholder and show loading
+            document.getElementById('previewPlaceholder').style.display = 'none';
+            document.getElementById('mergePreviewContent').innerHTML = '<div class="loading-message"><div class="loader"></div>취합 작업 중입니다...</div>';
+            document.getElementById('mergePreviewContent').style.display = 'flex';
+            
+            // Use setTimeout to allow the UI to update before the heavy processing starts
+            setTimeout(() => {
+                try {
+                    // Perform merge
+                    mergeIntoBase();
+                    
+                    // Show result in the main preview area
+                    createSheetTabs(mergedWorkbook, 'mergePreviewContent');
+                    
+                    // Enable download button
+                    document.getElementById('downloadButton').disabled = false;
+                } catch (error) {
+                    document.getElementById('mergePreviewContent').innerHTML = `
+                        <div class="preview-placeholder">
+                            <div class="preview-placeholder-icon">❌</div>
+                            <p>취합 중 오류가 발생했습니다:<br>${error.message}</p>
+                        </div>
+                    `;
+                    console.error('Merge error:', error);
+                }
+            }, 100);
+        }
+        
+        // Download merged file
+        function downloadMergedFile() {
+            if (!mergedWorkbook) {
+                showStatusMessage('먼저 취합 결과를 확인해주세요.', 'error', 'deptStatusMessage');
+                return;
+            }
+            
+            try {
+                // Clean up tracking information before saving
+                mergedWorkbook.SheetNames.forEach(sheetName => {
+                    const sheet = mergedWorkbook.Sheets[sheetName];
+                    delete sheet._updatedCells;
+                    delete sheet._changedCells;
+                });
+                
+                // Write workbook with styles
+                const wbout = XLSX.write(mergedWorkbook, {
+                    bookType: 'xlsx',
+                    type: 'array',
+                    cellStyles: true,
+                    bookSST: false
+                });
+                
+                const blob = new Blob([wbout], {
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                });
+                
+                // Create download link
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `시트합_취합결과_${new Date().toISOString().slice(0, 10)}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showStatusMessage('파일이 다운로드되었습니다.', 'success', 'deptStatusMessage');
+            } catch (error) {
+                showStatusMessage('파일 다운로드 중 오류가 발생했습니다: ' + error.message, 'error', 'deptStatusMessage');
+                console.error('Download error:', error);
+            }
+        }
+        
+        // Reset all
+        function resetAll() {
+            if (confirm('모든 데이터를 초기화하시겠습니까?')) {
+                baseWorkbook = null;
+                baseFileName = '';
+                departmentWorkbooks = [];
+                mergedWorkbook = null;
+                mergeStats = {
+                    totalSheets: 0,
+                    totalCells: 0,
+                    updatedCells: 0,
+                    changedCells: 0,
+                    preservedCells: 0
+                };
+                
+                // Reset UI
+                document.getElementById('baseFileInfo').classList.remove('show');
+                document.getElementById('step2Section').style.display = 'none';
+                document.getElementById('deptFileInfo').classList.remove('show');
+                document.getElementById('departmentFilesList').innerHTML = '';
+                document.getElementById('downloadButton').disabled = true;
+                document.getElementById('mergeButton').disabled = true;
+                document.getElementById('baseFile').value = '';
+                document.getElementById('deptFiles').value = '';
+                
+                // Reset preview area
+                document.getElementById('previewPlaceholder').style.display = 'flex';
+                document.getElementById('mergePreviewContent').style.display = 'none';
+                document.getElementById('mergePreviewContent').innerHTML = '';
+                
+                // Clear status messages
+                document.getElementById('baseStatusMessage').className = 'status-message';
+                document.getElementById('deptStatusMessage').className = 'status-message';
+                
+                showStatusMessage('초기화되었습니다.', 'info', 'baseStatusMessage');
+            }
+        }
+        
+        // Show status message
+        function showStatusMessage(message, type, elementId) {
+            const statusMessage = document.getElementById(elementId);
+            statusMessage.textContent = message;
+            statusMessage.className = `status-message show ${type}`;
+            
+            setTimeout(() => {
+                statusMessage.classList.remove('show');
+            }, 5000);
+        }
+        
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', () => {
+            initializeDragDrop();
+            
+            // Check if XLSX is loaded
+            if (typeof XLSX === 'undefined') {
+                showStatusMessage('엑셀 처리 라이브러리를 로드하는 중입니다. 잠시만 기다려주세요...', 'info', 'baseStatusMessage');
+            }
+        });
+    </script>
+</body>
+</html>
