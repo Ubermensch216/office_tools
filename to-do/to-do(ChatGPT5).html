@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>To‑Do</title>
+  <style>
+    :root{
+      --bg:#f6f7fb; --card:#fff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+      --primary:#0f172a; --primary-ink:#fff; --red:#ef4444; --amber:#f59e0b;
+      --chip:#eef2f7; --radius:16px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial}
+    .app{display:grid;grid-template-columns:260px 1fr;gap:16px;padding:24px;min-height:100vh}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:0 1px 0 rgba(0,0,0,.02)}
+    .sidebar{padding:16px}
+    .brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .brand .logo{display:grid;place-items:center;width:32px;height:32px;border-radius:12px;background:var(--primary);color:var(--primary-ink);font-weight:700}
+    .nav button{display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 12px;border-radius:12px;border:0;background:none;cursor:pointer}
+    .nav button:hover{background:#f1f5f9}
+    .nav button.active{background:var(--primary);color:var(--primary-ink)}
+    .badge{font-size:12px;color:#94a3b8}
+
+    .main{padding:16px}
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+    .search{position:relative;flex:1;min-width:220px}
+    .search input{width:100%;padding:10px 12px 10px 32px;border:1px solid var(--line);border-radius:999px}
+    .search .icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);opacity:.5}
+
+    .quickadd{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border:1px dashed var(--line);border-radius:16px;padding:8px 10px}
+    .quickadd input, .quickadd select{border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+    .btn{border:0;border-radius:12px;padding:8px 12px;cursor:pointer}
+    .btn.primary{background:var(--primary);color:var(--primary-ink)}
+    .btn.ghost{background:#f1f5f9}
+    .btn.danger{background:var(--red);color:#fff}
+
+    .heading{display:flex;align-items:center;justify-content:space-between;margin:8px 0}
+    .hint{color:var(--muted);font-size:12px}
+
+    .list{display:flex;flex-direction:column;gap:8px}
+    .row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:16px;background:#fff;padding:10px}
+    .row .left{display:flex;gap:8px;align-items:center}
+    .checkbox{width:18px;height:18px;border:1px solid var(--line);border-radius:4px;display:inline-block;cursor:pointer}
+    .checkbox.done{background:var(--primary)}
+    .title{font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;color:var(--muted);font-size:12px}
+    .tag{background:#f1f5f9;border-radius:999px;padding:2px 6px}
+    .priority{border-radius:6px;padding:2px 6px;font-size:12px}
+    .p-low{background:#eef2ff;color:#3730a3}
+    .p-medium{background:#fffbeb;color:#92400e}
+    .p-high{background:#fee2e2;color:#991b1b}
+    .row .actions{opacity:0;transition:.15s}
+    .row:hover .actions{opacity:1}
+
+    .empty{border:1px dashed var(--line);border-radius:16px;padding:24px;text-align:center;color:var(--muted)}
+
+    .bulkbar{position:sticky;bottom:16px;display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px;background:#fff;border:1px solid var(--line);padding:10px 12px;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.06)}
+
+    /* Accessibility focus */
+    button:focus, input:focus, select:focus{outline:3px solid #93c5fd;outline-offset:1px}
+
+    @media (max-width: 900px){
+      .app{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+<div class="app" role="application" aria-label="구청 To‑Do 앱">
+  <!-- Sidebar -->
+  <aside class="card sidebar" aria-label="사이드바 내비게이션">
+    <div class="brand">
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="logo" aria-hidden>✓</div>
+        <strong>구청 To‑Do</strong>
+      </div>
+      <button id="resetDemo" class="btn ghost" title="모든 데이터 삭제">리셋</button>
+    </div>
+
+    <nav class="nav" aria-label="기본 보기">
+      <button data-view="today" class="active"><span>오늘</span> <span class="badge" id="count-today">0</span></button>
+      <button data-view="upcoming"><span>다가오는 일정</span> <span class="badge" id="count-upcoming">0</span></button>
+      <button data-view="starred"><span>중요 표시</span> <span class="badge" id="count-starred">0</span></button>
+      <button data-view="completed"><span>완료됨</span> <span class="badge" id="count-completed">0</span></button>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <main class="card main">
+    <div class="toolbar" aria-label="도구 모음">
+      <div class="search" aria-label="검색">
+        <span class="icon" aria-hidden>🔎</span>
+        <input id="searchInput" placeholder="검색: 제목/설명/태그/담당자" aria-label="검색 입력" />
+      </div>
+      <form id="quickAdd" class="quickadd" aria-label="빠른 추가" autocomplete="off">
+        <input id="qa-title" placeholder="할 일을 입력하세요 (⌘/Ctrl + I)" aria-label="할 일 제목" required />
+        <input id="qa-due" type="date" aria-label="마감일" />
+        <select id="qa-priority" aria-label="우선순위">
+          <option value="low">low</option>
+          <option value="medium" selected>medium</option>
+          <option value="high">high</option>
+        </select>
+        <button class="btn primary" type="submit">추가</button>
+      </form>
+    </div>
+
+    <div class="heading">
+      <div id="viewTitle" class="title">오늘</div>
+      <div class="hint">단축키: 전체선택 ⌘/Ctrl + A · 완료 ⌘/Ctrl + B · 삭제 ⌘/Ctrl + D</div>
+    </div>
+
+    <div id="list" class="list" role="list" aria-label="작업 목록"></div>
+
+    <div id="bulkbar" class="bulkbar" role="toolbar" aria-label="일괄 작업 바" hidden>
+      <span id="selCount" class="hint">0개 선택됨</span>
+      <button id="bulkComplete" class="btn primary">완료 처리</button>
+      <button id="bulkDelete" class="btn danger">삭제</button>
+      <button id="bulkClear" class="btn ghost">선택 해제</button>
+    </div>
+  </main>
+</div>
+
+<script>
+// ===================== IndexedDB Layer =====================
+const DB_NAME = 'govTodoDB';
+const DB_VERSION = 1; // 스키마는 유지(부서 인덱스는 사용 안 함)
+const STORE = 'tasks';
+
+function idbOpen(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if(!db.objectStoreNames.contains(STORE)){
+        const os = db.createObjectStore(STORE, { keyPath: 'id' });
+        os.createIndex('status_due', ['completed','due']);
+        os.createIndex('department', 'department');
+        os.createIndex('starred_completed', ['starred','completed']);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbGetAll(){
+  const db = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE,'readonly');
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPut(task){
+  const db = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE,'readwrite');
+    tx.objectStore(STORE).put(task);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbBulkPut(tasks){
+  const db = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE,'readwrite');
+    const store = tx.objectStore(STORE);
+    tasks.forEach(t=>store.put(t));
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbDelete(id){
+  const db = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE,'readwrite');
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbClear(){
+  const db = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE,'readwrite');
+    tx.objectStore(STORE).clear();
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// 데모 데이터 영구 제거 유틸리티
+async function purgeDemoIfPresent(){
+  const demoIds = new Set(['t1','t2','t3']);
+  const tasks = await idbGetAll();
+  const toDelete = tasks.filter(t=> demoIds.has(t.id));
+  if(toDelete.length){
+    for(const t of toDelete){ await idbDelete(t.id); }
+  }
+}
+
+// ===================== App State & Utils =====================
+const $ = (sel,root=document)=>root.querySelector(sel);
+const $$ = (sel,root=document)=>Array.from(root.querySelectorAll(sel));
+const uid = ()=>Math.random().toString(36).slice(2);
+
+const state = {
+  tasks: [],
+  view: 'today', // 기본 보기를 오늘로 변경
+  q: '',
+  selected: new Set(),
+};
+
+// 데모 데이터 제거: 더 이상 기본 seed를 사용하지 않습니다.
+const seed = [];
+
+function addHours(h){return new Date(Date.now()+h*3600*1000).toISOString();}
+function fmtDate(iso){ if(!iso) return ''; const d=new Date(iso); if(Number.isNaN(d.getTime())) return ''; const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
+function isToday(iso){ if(!iso) return false; const d=new Date(iso); const n=new Date(); return d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate(); }
+function isUpcoming(iso){ if(!iso) return false; const d=new Date(iso); const n=new Date(); return d.getTime()-n.getTime()>24*3600*1000; }
+
+function priorityClass(p){
+  if(p==='high') return 'priority p-high';
+  if(p==='medium') return 'priority p-medium';
+  return 'priority p-low';
+}
+
+function computeCounts(){
+  const t = state.tasks;
+  return {
+    today: t.filter(x=>!x.completed && isToday(x.due)).length,
+    upcoming: t.filter(x=>!x.completed && isUpcoming(x.due)).length,
+    starred: t.filter(x=>x.starred && !x.completed).length,
+    completed: t.filter(x=>x.completed).length,
+  };
+}
+
+function filteredTasks(){
+  let list = state.tasks.filter(t=>{
+    if(state.view==='today') return !t.completed && isToday(t.due);
+    if(state.view==='upcoming') return !t.completed && isUpcoming(t.due);
+    if(state.view==='starred') return t.starred && !t.completed;
+    if(state.view==='completed') return t.completed;
+    return !t.completed; // 안전장치
+  });
+  if(state.q.trim()){
+    const needle = state.q.toLowerCase();
+    list = list.filter(t=> [t.title,t.description,t.assignee,...(t.tags||[])].filter(Boolean).some(s=>String(s).toLowerCase().includes(needle)) );
+  }
+  return list.sort((a,b)=> (a.due||'').localeCompare(b.due||''));
+}
+
+// ===================== Render =====================
+function render(){
+  // counts
+  const c = computeCounts();
+  $('#count-today').textContent = c.today;
+  $('#count-upcoming').textContent = c.upcoming;
+  $('#count-starred').textContent = c.starred;
+  $('#count-completed').textContent = c.completed;
+
+  // view title
+  const titles = {today:'오늘', upcoming:'다가오는 일정', starred:'중요 표시', completed:'완료됨'};
+  $('#viewTitle').textContent = titles[state.view] || '오늘';
+
+  // list
+  const list = $('#list');
+  list.innerHTML='';
+  const tasks = filteredTasks();
+  if(tasks.length===0){
+    const div = document.createElement('div');
+    div.className='empty';
+    div.textContent='표시할 작업이 없습니다 — 빠른 추가에서 새 작업을 만들어 보세요';
+    list.appendChild(div);
+  } else {
+    tasks.forEach(t=> list.appendChild(row(t)) );
+  }
+
+  // bulk bar
+  const selCount = state.selected.size;
+  $('#selCount').textContent = `${selCount}개 선택됨`;
+  $('#bulkbar').hidden = selCount===0;
+
+  // nav active
+  $$('.nav button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.view===state.view);
+  });
+}
+
+function row(task){
+  const wr = document.createElement('div');
+  wr.className='row';
+  wr.setAttribute('role','listitem');
+
+  // left
+  const left = document.createElement('div');
+  left.className='left';
+
+  const sel = document.createElement('input');
+  sel.type='checkbox';
+  sel.setAttribute('aria-label','선택');
+  sel.checked = state.selected.has(task.id);
+  sel.onchange = e => {
+    if(e.target.checked) state.selected.add(task.id); else state.selected.delete(task.id); render();
+  };
+
+  const box = document.createElement('button');
+  box.className = 'checkbox'+(task.completed?' done':'');
+  box.setAttribute('aria-label', task.completed?'완료 취소':'완료');
+  box.onclick = async ()=>{ task.completed=!task.completed; await idbPut(task); render(); };
+
+  left.appendChild(sel); left.appendChild(box);
+
+  // center
+  const center = document.createElement('div');
+  const ttl = document.createElement('div');
+  ttl.className='title';
+  ttl.textContent = task.title;
+  ttl.title = '더블클릭으로 제목 편집';
+  ttl.ondblclick = async ()=>{
+    const nv = prompt('제목을 수정하세요', task.title);
+    if(nv!==null && nv.trim()) { task.title = nv.trim(); await idbPut(task); render(); }
+  };
+
+  const meta = document.createElement('div');
+  meta.className='meta';
+  if(task.priority){ const p=document.createElement('span'); p.className=priorityClass(task.priority); p.textContent=task.priority; meta.appendChild(p); }
+  if(task.starred){ const s=document.createElement('span'); s.className='tag'; s.textContent='★'; meta.appendChild(s); }
+  if(task.due){ const d=document.createElement('span'); d.className='tag'; d.textContent=fmtDate(task.due); meta.appendChild(d); }
+  if(task.assignee){ const a=document.createElement('span'); a.className='tag'; a.textContent=task.assignee; meta.appendChild(a); }
+  (task.tags||[]).forEach(t=>{ const tg=document.createElement('span'); tg.className='tag'; tg.textContent=t; meta.appendChild(tg); });
+
+  center.appendChild(ttl); center.appendChild(meta);
+
+  // right actions
+  const actions = document.createElement('div');
+  actions.className='actions';
+
+  const star = document.createElement('button'); star.className='btn ghost'; star.textContent='중요'; star.onclick = async ()=>{ task.starred=!task.starred; await idbPut(task); render(); };
+  const edit = document.createElement('button'); edit.className='btn ghost'; edit.textContent='수정'; edit.onclick = async ()=>{
+    const nv = prompt('제목을 수정하세요', task.title);
+    if(nv!==null && nv.trim()) { task.title = nv.trim(); await idbPut(task); render(); }
+  };
+  const del = document.createElement('button'); del.className='btn danger'; del.textContent='삭제'; del.onclick = async ()=>{ await idbDelete(task.id); state.selected.delete(task.id); state.tasks = state.tasks.filter(x=>x.id!==task.id); render(); };
+
+  actions.appendChild(star); actions.appendChild(edit); actions.appendChild(del);
+
+  wr.appendChild(left); wr.appendChild(center); wr.appendChild(actions);
+  return wr;
+}
+
+// ===================== Event Wiring =====================
+$('#resetDemo').onclick = async ()=>{
+  await idbClear();
+  state.tasks = [];
+  state.selected.clear();
+  render();
+};
+
+$$('.nav button').forEach(b=>{
+  b.onclick = ()=>{ state.view = b.dataset.view; state.selected.clear(); render(); };
+});
+
+$('#searchInput').addEventListener('input', e=>{ state.q = e.target.value; render(); });
+
+$('#quickAdd').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const title = $('#qa-title').value.trim();
+  if(!title) return;
+  const due = $('#qa-due').value ? new Date($('#qa-due').value).toISOString() : undefined;
+  const priority = $('#qa-priority').value || 'medium';
+  const task = { id: uid(), title, due, priority, completed:false, starred:false, createdAt:new Date().toISOString() };
+  await idbPut(task);
+  state.tasks.push(task);
+  $('#qa-title').value=''; $('#qa-due').value=''; $('#qa-priority').value='medium';
+  render();
+});
+
+$('#bulkComplete').onclick = async ()=>{
+  if(state.selected.size===0) return;
+  const updates=[];
+  state.tasks.forEach(t=>{ if(state.selected.has(t.id) && !t.completed){ t.completed=true; updates.push(t); }});
+  if(updates.length) await idbBulkPut(updates);
+  state.selected.clear(); render();
+};
+$('#bulkDelete').onclick = async ()=>{
+  if(state.selected.size===0) return;
+  const ids=[...state.selected];
+  for(const id of ids) await idbDelete(id);
+  state.tasks = state.tasks.filter(t=>!state.selected.has(t.id));
+  state.selected.clear(); render();
+};
+$('#bulkClear').onclick = ()=>{ state.selected.clear(); render(); };
+
+// Keyboard shortcuts
+window.addEventListener('keydown', (e)=>{
+  const k = e.key.toLowerCase();
+  if((e.metaKey||e.ctrlKey) && k==='i'){ e.preventDefault(); $('#qa-title').focus(); }
+  if((e.metaKey||e.ctrlKey) && k==='a'){ e.preventDefault();
+    filteredTasks().forEach(t=>state.selected.add(t.id)); render();
+  }
+  if((e.metaKey||e.ctrlKey) && k==='b'){ e.preventDefault(); $('#bulkComplete').click(); }
+  if((e.metaKey||e.ctrlKey) && k==='d'){ e.preventDefault(); $('#bulkDelete').click(); }
+});
+
+// ===================== Boot =====================
+(async function boot(){
+  // 기존 브라우저에 남아있을 수 있는 데모 데이터(t1,t2,t3) 강제 제거
+  await purgeDemoIfPresent();
+  // 초기 로드: 더 이상 자동 시드하지 않음
+  const tasks = await idbGetAll();
+  state.tasks = tasks || [];
+  render();
+})();
+</script>
+</body>
+</html>
