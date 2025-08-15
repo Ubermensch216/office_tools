@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';" />
   <title>투두엔드(ToDo End)</title>
   <style>
     :root {
@@ -178,9 +177,6 @@
       .input-field { min-width: auto; }
       .footer { padding: 12px 16px; }
       .footer-content { font-size: 13px; }
-      .calendar-grid { gap: 1px; }
-      .calendar-day { min-height: 80px; padding: 6px; }
-      .calendar-task { font-size: 10px; padding: 1px 4px; }
     }
 
     @media (max-width: 640px) {
@@ -189,30 +185,7 @@
       .bulk-actions { flex-direction: column; gap: 12px; align-items: stretch; }
       .bulk-buttons { justify-content: center; }
       .notification { top: 16px; right: 16px; left: 16px; max-width: none; }
-      .calendar-header { flex-direction: column; gap: 12px; }
-      .calendar-title { order: -1; }
-      .calendar-day { min-height: 60px; padding: 4px; }
-      .calendar-day-number { font-size: 12px; }
-      .calendar-task { font-size: 9px; padding: 1px 3px; margin: 0.5px 0; }
-      .monthly-view { padding: 16px; }
     }
-
-    /* Monthly Calendar View */
-    .monthly-view { padding: 24px; }
-    .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-    .calendar-title { font-size: 24px; font-weight: 700; color: var(--text-primary); }
-    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; background: var(--bg-glass); border-radius: 12px; padding: 16px; }
-    .calendar-day-header { padding: 12px; text-align: center; font-weight: 600; color: var(--text-secondary); background: var(--bg-card); border-radius: 8px; }
-    .calendar-day { min-height: 100px; padding: 8px; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border); position: relative; cursor: pointer; transition: all 0.2s ease; }
-    .calendar-day:hover { background: var(--bg-glass); transform: translateY(-1px); }
-    .calendar-day.other-month { opacity: 0.4; }
-    .calendar-day.today { border-color: #667eea; background: rgba(102, 126, 234, 0.1); }
-    .calendar-day-number { font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-    .calendar-task { font-size: 11px; padding: 2px 6px; margin: 1px 0; border-radius: 4px; background: var(--bg-glass); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-    .calendar-task.priority-high { background: rgba(245, 101, 101, 0.2); color: var(--danger); }
-    .calendar-task.priority-medium { background: rgba(237, 137, 54, 0.2); color: var(--warning); }
-    .calendar-task.priority-low { background: rgba(72, 187, 120, 0.2); color: var(--success); }
-    .calendar-task.completed { text-decoration: line-through; opacity: 0.6; }
 
     /* Scrollbar */
     ::-webkit-scrollbar { width: 8px; }
@@ -277,13 +250,6 @@
           </div>
           <span class="badge" id="count-completed">0</span>
         </button>
-        <button class="nav-item" data-view="monthly">
-          <div style="display: flex; align-items: center;">
-            <span class="nav-icon">🗓️</span>
-            <span>월간 보기</span>
-          </div>
-          <span class="badge" id="count-monthly">0</span>
-        </button>
       </nav>
 
       <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border);">
@@ -328,18 +294,6 @@
         <div class="loading">
           <div class="spinner"></div>
           <span>작업 로딩 중...</span>
-        </div>
-      </div>
-
-      <!-- Monthly Calendar View (Hidden by default) -->
-      <div class="monthly-view" id="monthlyView" style="display: none;" role="region" aria-label="월간 캘린더 보기">
-        <div class="calendar-header">
-          <button class="btn btn-ghost" id="prevMonth" aria-label="이전 달로 이동">◀ 이전</button>
-          <h2 class="calendar-title" id="calendarTitle" aria-live="polite">2024년 1월</h2>
-          <button class="btn btn-ghost" id="nextMonth" aria-label="다음 달로 이동">다음 ▶</button>
-        </div>
-        <div class="calendar-grid" id="calendarGrid" role="grid" aria-label="월간 캘린더 그리드">
-          <!-- Calendar will be dynamically generated -->
         </div>
       </div>
 
@@ -478,9 +432,7 @@
       view: 'today',
       query: '',
       selected: new Set(),
-      isLoading: false,
-      currentMonth: new Date(), // 현재 보고 있는 월
-      calendarTasks: [] // 월간 보기에서 필터링된 작업들
+      isLoading: false
     };
 
     // ===================== Notification System =====================
@@ -494,53 +446,6 @@
         setTimeout(() => { notification.parentNode && notification.parentNode.removeChild(notification); }, 300);
       }, 3000);
     }
-
-    // ===================== Monthly Calendar Test Cases =====================
-    /**
-     * TDD Test Cases for Monthly Calendar Feature
-     * 
-     * Test Case 1: Calendar Generation
-     * - Given: A specific month and year (e.g., 2024년 1월)
-     * - When: generateCalendar() is called
-     * - Then: Should generate 42 day cells (6 weeks × 7 days)
-     * - And: Should mark today's date
-     * - And: Should handle month boundaries correctly
-     * 
-     * Test Case 2: Month Navigation
-     * - Given: Current month is displayed
-     * - When: Previous/Next month buttons are clicked
-     * - Then: Should update calendar to show previous/next month
-     * - And: Should update calendar title
-     * - And: Should preserve task filtering
-     * 
-     * Test Case 3: Task Filtering by Month
-     * - Given: Tasks with various due dates
-     * - When: getTasksForMonth() is called with specific month
-     * - Then: Should return only tasks with due dates in that month
-     * - And: Should handle tasks without due dates
-     * - And: Should include both completed and uncompleted tasks
-     * 
-     * Test Case 4: Task Display on Calendar
-     * - Given: Tasks with due dates in current month
-     * - When: renderCalendarTasks() is called
-     * - Then: Should display tasks on correct calendar dates
-     * - And: Should apply priority-based styling
-     * - And: Should truncate long task titles
-     * - And: Should show completion status
-     * 
-     * Test Case 5: Calendar Day Click
-     * - Given: A calendar day with or without tasks
-     * - When: User clicks on the day
-     * - Then: Should show tasks for that specific date
-     * - And: Should allow adding new tasks for that date
-     * 
-     * Test Case 6: View Toggle
-     * - Given: User is in list view
-     * - When: Monthly view button is clicked
-     * - Then: Should hide list view and show calendar
-     * - And: Should update navigation state
-     * - And: Should update task counts
-     */
 
     // ===================== Date Utilities =====================
     function formatDate(iso) {
@@ -567,14 +472,7 @@
       if (diffDays === -1) return '어제';
       if (diffDays > 1 && diffDays <= 7) return `${diffDays}일 후`;
       if (diffDays < -1 && diffDays >= -7) return `${Math.abs(diffDays)}일 전`;
-      return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' });
-    }
-
-    /**
-     * 월간 캘린더용 날짜 포맷터
-     */
-    function formatMonthYear(date) {
-      return date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
+      return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
     }
 
     function isToday(iso) {
@@ -614,7 +512,6 @@
         upcoming: t.filter(x => !x.completed && isUpcoming(x.due)).length,
         starred: t.filter(x => x.starred && !x.completed).length,
         completed: t.filter(x => x.completed).length,
-        monthly: getTasksForMonth(state.currentMonth).length,
       };
     }
 
@@ -624,7 +521,6 @@
         if (state.view === 'upcoming') return !t.completed && isUpcoming(t.due);
         if (state.view === 'starred') return t.starred && !t.completed;
         if (state.view === 'completed') return t.completed;
-        if (state.view === 'monthly') return true; // 월간 보기에서는 별도 렌더링
         return !t.completed;
       });
       
@@ -644,76 +540,6 @@
         if (!a.due && b.due) return 1;
         return new Date(b.createdAt) - new Date(a.createdAt); // 최신이 먼저
       });
-    }
-
-    // ===================== Monthly Calendar Functions =====================
-    /**
-     * Test Case 3: Task Filtering by Month
-     * Returns tasks with due dates in the specified month
-     */
-    function getTasksForMonth(monthDate) {
-      const year = monthDate.getFullYear();
-      const month = monthDate.getMonth();
-      
-      return state.tasks.filter(task => {
-        if (!task.due) return false;
-        const taskDate = new Date(task.due);
-        return taskDate.getFullYear() === year && taskDate.getMonth() === month;
-      });
-    }
-
-    /**
-     * Test Case 1: Calendar Generation
-     * Generates calendar grid for the specified month
-     */
-    function generateCalendar(monthDate) {
-      const year = monthDate.getFullYear();
-      const month = monthDate.getMonth();
-      const firstDay = new Date(year, month, 1);
-      const lastDay = new Date(year, month + 1, 0);
-      const startDate = new Date(firstDay);
-      
-      // 월요일 시작으로 조정 (한국 표준)
-      const dayOfWeek = (firstDay.getDay() + 6) % 7; // 일요일=0 -> 6, 월요일=1 -> 0
-      startDate.setDate(startDate.getDate() - dayOfWeek);
-      
-      const calendar = [];
-      const today = new Date();
-      
-      // 6주 × 7일 = 42일 생성
-      for (let i = 0; i < 42; i++) {
-        const currentDate = new Date(startDate);
-        currentDate.setDate(startDate.getDate() + i);
-        
-        calendar.push({
-          date: currentDate,
-          day: currentDate.getDate(),
-          isCurrentMonth: currentDate.getMonth() === month,
-          isToday: currentDate.toDateString() === today.toDateString(),
-          tasks: getTasksForDate(currentDate)
-        });
-      }
-      
-      return calendar;
-    }
-
-    /**
-     * Helper function to get tasks for specific date
-     */
-    function getTasksForDate(date) {
-      const dateStr = date.toDateString();
-      let tasks = state.tasks.filter(task => {
-        if (!task.due) return false;
-        return new Date(task.due).toDateString() === dateStr;
-      });
-      
-      // 검색 필터 적용
-      if (state.query.trim()) {
-        const needle = state.query.toLowerCase();
-        tasks = tasks.filter(t => [t.title, t.description, t.assignee, ...(t.tags || [])].filter(Boolean).some(s => String(s).toLowerCase().includes(needle)));
-      }
-      
-      return tasks;
     }
 
     // ===================== Render Functions =====================
@@ -739,161 +565,28 @@
       renderNavigation();
     }
 
-    /**
-     * 월간 보기 전용 부분 렌더링 (성능 최적화)
-     */
-    function renderMonthlyOnly() {
-      if (state.view === 'monthly') {
-        renderCalendarGrid();
-        renderCounts();
-      }
-    }
-
     function renderCounts() {
       const counts = computeCounts();
       $('#count-today').textContent = counts.today;
       $('#count-upcoming').textContent = counts.upcoming;
       $('#count-starred').textContent = counts.starred;
       $('#count-completed').textContent = counts.completed;
-      $('#count-monthly').textContent = counts.monthly;
     }
 
     function renderViewTitle() {
-      const titles = { 
-        today: '오늘', 
-        upcoming: '예정된 작업', 
-        starred: '중요', 
-        completed: '완료',
-        monthly: '월간 보기'
-      };
+      const titles = { today: '오늘', upcoming: '예정된 작업', starred: '중요', completed: '완료' };
       $('#viewTitle').textContent = titles[state.view] || '오늘';
     }
 
     function renderTaskList() {
-      const taskList = $('#taskList');
-      const monthlyView = $('#monthlyView');
-      
-      if (state.view === 'monthly') {
-        // 월간 보기: 태스크 리스트 숨기고 캘린더 표시
-        taskList.style.display = 'none';
-        monthlyView.style.display = 'block';
-        renderMonthlyCalendar();
+      const list = $('#taskList');
+      list.innerHTML = '';
+      const tasks = filteredTasks();
+      if (tasks.length === 0) {
+        renderEmptyState(list);
       } else {
-        // 일반 보기: 캘린더 숨기고 태스크 리스트 표시
-        taskList.style.display = 'flex';
-        monthlyView.style.display = 'none';
-        
-        taskList.innerHTML = '';
-        const tasks = filteredTasks();
-        if (tasks.length === 0) {
-          renderEmptyState(taskList);
-        } else {
-          tasks.forEach(task => { taskList.appendChild(createTaskElement(task)); });
-        }
+        tasks.forEach(task => { list.appendChild(createTaskElement(task)); });
       }
-    }
-
-    /**
-     * Test Case 4: Task Display on Calendar
-     * Renders the monthly calendar view
-     */
-    function renderMonthlyCalendar() {
-      renderCalendarTitle();
-      renderCalendarGrid();
-    }
-
-    function renderCalendarTitle() {
-      const title = $('#calendarTitle');
-      title.textContent = formatMonthYear(state.currentMonth);
-    }
-
-    function renderCalendarGrid() {
-      const grid = $('#calendarGrid');
-      grid.innerHTML = '';
-      
-      // 요일 헤더 추가
-      const dayHeaders = ['월', '화', '수', '목', '금', '토', '일'];
-      dayHeaders.forEach(day => {
-        const header = document.createElement('div');
-        header.className = 'calendar-day-header';
-        header.textContent = day;
-        header.setAttribute('role', 'columnheader');
-        header.setAttribute('aria-label', `${day}요일`);
-        grid.appendChild(header);
-      });
-      
-      // 캘린더 날짜 생성
-      const calendar = generateCalendar(state.currentMonth);
-      calendar.forEach(dayData => {
-        const dayElement = createCalendarDay(dayData);
-        grid.appendChild(dayElement);
-      });
-    }
-
-    function createCalendarDay(dayData) {
-      const dayEl = document.createElement('div');
-      dayEl.className = `calendar-day ${!dayData.isCurrentMonth ? 'other-month' : ''} ${dayData.isToday ? 'today' : ''}`;
-      dayEl.setAttribute('data-date', dayData.date.toISOString());
-      dayEl.setAttribute('role', 'gridcell');
-      dayEl.setAttribute('tabindex', '0');
-      dayEl.setAttribute('aria-label', `${formatDisplayDate(dayData.date.toISOString())}, ${dayData.tasks.length}개 작업`);
-      
-      // 날짜 번호
-      const dayNumber = document.createElement('div');
-      dayNumber.className = 'calendar-day-number';
-      dayNumber.textContent = dayData.day;
-      dayEl.appendChild(dayNumber);
-      
-      // 해당 날짜의 작업들
-      dayData.tasks.slice(0, 3).forEach(task => { // 최대 3개까지만 표시
-        const taskEl = document.createElement('div');
-        taskEl.className = `calendar-task priority-${task.priority} ${task.completed ? 'completed' : ''}`;
-        taskEl.textContent = task.title;
-        taskEl.title = task.title; // 전체 제목을 툴팁으로
-        
-        // 작업 클릭 시 편집 모달 열기
-        taskEl.addEventListener('click', (e) => {
-          e.stopPropagation();
-          editTask(task);
-        });
-        
-        dayEl.appendChild(taskEl);
-      });
-      
-      // 작업이 3개 초과인 경우 '+N개 더' 표시
-      if (dayData.tasks.length > 3) {
-        const moreEl = document.createElement('div');
-        moreEl.className = 'calendar-task';
-        moreEl.textContent = `+${dayData.tasks.length - 3}개 더`;
-        moreEl.style.fontWeight = 'bold';
-        
-        // '+N개 더' 클릭 시 해당 날짜의 모든 작업을 알림으로 표시
-        moreEl.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const allTasks = dayData.tasks.map(t => t.title).join('\n');
-          alert(`${formatDisplayDate(dayData.date.toISOString())} 작업 목록:\n\n${allTasks}`);
-        });
-        
-        dayEl.appendChild(moreEl);
-      }
-      
-      /**
-       * Test Case 5: Calendar Day Click
-       * 날짜 클릭 시 해당 날짜로 빠른 추가 폼의 날짜 설정
-       */
-      dayEl.addEventListener('click', () => {
-        if (dayData.isCurrentMonth) {
-          const dateInput = $('#qa-due');
-          const year = dayData.date.getFullYear();
-          const month = String(dayData.date.getMonth() + 1).padStart(2, '0');
-          const day = String(dayData.date.getDate()).padStart(2, '0');
-          dateInput.value = `${year}-${month}-${day}`;
-          $('#qa-title').focus();
-          showNotification(`${formatDisplayDate(dayData.date.toISOString())} 날짜가 선택되었습니다.`, 'success');
-        }
-      });
-      
-      return dayEl;
     }
 
     function renderEmptyState(container) {
@@ -903,8 +596,7 @@
         today: { icon: '☀️', title: '오늘 할 일이 없습니다', subtitle: '새로운 작업을 추가하거나 휴식을 취하세요' },
         upcoming: { icon: '📅', title: '예정된 작업이 없습니다', subtitle: '앞으로의 계획을 세워보세요' },
         starred: { icon: '⭐', title: '중요한 작업이 없습니다', subtitle: '작업에 별표를 추가해 중요도를 표시하세요' },
-        completed: { icon: '✅', title: '완료된 작업이 없습니다', subtitle: '작업을 완료하면 여기에 표시됩니다' },
-        monthly: { icon: '🗓️', title: '이번 달 작업이 없습니다', subtitle: '새로운 작업을 추가해보세요' }
+        completed: { icon: '✅', title: '완료된 작업이 없습니다', subtitle: '작업을 완료하면 여기에 표시됩니다' }
       };
       const message = emptyMessages[state.view] || emptyMessages.today;
       emptyDiv.innerHTML = `
@@ -928,13 +620,13 @@
         <input type="checkbox" class="select-checkbox" ${state.selected.has(task.id) ? 'checked' : ''}>
         <button class="task-checkbox ${task.completed ? 'completed' : ''}" aria-label="${task.completed ? '완료 취소' : '완료'}"></button>
         <div class="task-content">
-          <div class="task-title" title="더블클릭으로 편집">${Sanitizer.html(task.title)}</div>
+          <div class="task-title" title="더블클릭으로 편집">${escapeHtml(task.title)}</div>
           <div class="task-meta">
             ${task.priority ? `<span class="${priorityClass(task.priority)}">${priorityText(task.priority)}</span>` : ''}
             ${task.starred ? '<span class="tag">⭐ 중요</span>' : ''}
             ${task.due ? `<span class="tag ${isTaskOverdue ? 'priority-high' : ''}">📅 ${dueDateInfo}${isTaskOverdue ? ' (지연)' : ''}</span>` : ''}
-            ${task.assignee ? `<span class="tag">👤 ${Sanitizer.html(task.assignee)}</span>` : ''}
-            ${(task.tags || []).map(tag => `<span class="tag">#${Sanitizer.html(tag)}</span>`).join('')}
+            ${task.assignee ? `<span class="tag">👤 ${escapeHtml(task.assignee)}</span>` : ''}
+            ${(task.tags || []).map(tag => `<span class="tag">#${escapeHtml(tag)}</span>`).join('')}
           </div>
         </div>
         <div class="task-actions">
@@ -989,7 +681,8 @@
         showNotification(task.completed ? '작업이 완료되었습니다!' : '작업이 미완료로 변경되었습니다.', 'success');
         render();
       } catch (error) {
-        ErrorHandler.handle(error, 'toggleTaskCompletion', '작업 상태 변경에 실패했습니다.');
+        console.error('작업 완료 상태 변경 실패:', error);
+        showNotification('작업 상태 변경에 실패했습니다.', 'error');
         // 롤백
         task.completed = !task.completed;
         task.completedAt = task.completed ? new Date().toISOString() : null;
@@ -1014,7 +707,8 @@
             break;
         }
       } catch (error) {
-        ErrorHandler.handle(error, 'handleTaskAction', '작업 수행에 실패했습니다.');
+        console.error('작업 액션 실행 실패:', error);
+        showNotification('작업 수행에 실패했습니다.', 'error');
       }
     }
 
@@ -1033,7 +727,7 @@
           <form id="editForm">
             <div style="margin-bottom: 16px;">
               <label style="display: block; margin-bottom: 8px; color: var(--text-secondary);">제목</label>
-              <input type="text" id="edit-title" value="${Sanitizer.attribute(task.title)}" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-glass);" required>
+              <input type="text" id="edit-title" value="${escapeHtml(task.title)}" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-glass);" required>
             </div>
             <div style="margin-bottom: 16px;">
               <label style="display: block; margin-bottom: 8px; color: var(--text-secondary);">마감일</label>
@@ -1049,7 +743,7 @@
             </div>
             <div style="margin-bottom: 16px;">
               <label style="display: block; margin-bottom: 8px; color: var(--text-secondary);">담당자</label>
-              <input type="text" id="edit-assignee" value="${Sanitizer.attribute(task.assignee || '')}" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-glass);" placeholder="담당자 이름">
+              <input type="text" id="edit-assignee" value="${escapeHtml(task.assignee || '')}" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-glass);" placeholder="담당자 이름">
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
               <button type="button" id="cancelEdit" class="btn btn-ghost">취소</button>
@@ -1068,36 +762,20 @@
         const newDue = modal.querySelector('#edit-due').value;
         const newPriority = modal.querySelector('#edit-priority').value;
         const newAssignee = modal.querySelector('#edit-assignee').value.trim();
-        
-        // Validate inputs
-        if (!Validator.task.title(newTitle)) {
-          showNotification('제목은 1-200자 사이여야 합니다.', 'error');
-          return;
-        }
-        if (!Validator.task.priority(newPriority)) {
-          showNotification('올바른 우선순위를 선택해주세요.', 'error');
-          return;
-        }
-        if (!Validator.task.assignee(newAssignee)) {
-          showNotification('담당자는 50자 이하의 한글, 영문, 공백만 입력 가능합니다.', 'error');
-          return;
-        }
-        if (!Validator.task.date(newDue)) {
-          showNotification('올바른 날짜를 입력해주세요.', 'error');
-          return;
-        }
+        if (!newTitle) { showNotification('제목을 입력해주세요.', 'error'); return; }
         try {
-          task.title = Sanitizer.html(newTitle);
+          task.title = newTitle;
           task.due = newDue ? new Date(newDue).toISOString() : null;
           task.priority = newPriority;
-          task.assignee = newAssignee ? Sanitizer.html(newAssignee) : null;
+          task.assignee = newAssignee || null;
           task.updatedAt = new Date().toISOString();
           await idbPut(task);
           showNotification('작업이 수정되었습니다.', 'success');
           render();
           document.body.removeChild(modal);
         } catch (error) {
-          ErrorHandler.handle(error, 'editTask', '작업 수정에 실패했습니다.');
+          console.error('작업 수정 실패:', error);
+          showNotification('작업 수정에 실패했습니다.', 'error');
         }
       });
 
@@ -1115,7 +793,8 @@
         showNotification('작업이 삭제되었습니다.', 'success');
         render();
       } catch (error) {
-        ErrorHandler.handle(error, 'deleteTask', '작업 삭제에 실패했습니다.');
+        console.error('작업 삭제 실패:', error);
+        showNotification('작업 삭제에 실패했습니다.', 'error');
       }
     }
 
@@ -1136,14 +815,7 @@
       let searchTimeout;
       $('#searchInput').addEventListener('input', (e) => {
         clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => { 
-          state.query = e.target.value; 
-          if (state.view === 'monthly') {
-            renderMonthlyOnly(); // 월간 보기에서는 최적화된 렌더링
-          } else {
-            render(); // 다른 보기에서는 전체 렌더링
-          }
-        }, 300);
+        searchTimeout = setTimeout(() => { state.query = e.target.value; render(); }, 300);
       });
 
       // Quick add form
@@ -1160,15 +832,6 @@
       // Reset button
       $('#resetBtn').addEventListener('click', handleReset);
 
-      // Monthly calendar navigation
-      $('#prevMonth').addEventListener('click', () => {
-        navigateMonth(-1);
-      });
-      
-      $('#nextMonth').addEventListener('click', () => {
-        navigateMonth(1);
-      });
-
       // Keyboard shortcuts
       window.addEventListener('keydown', handleKeyboardShortcuts);
 
@@ -1183,41 +846,19 @@
       const assigneeInput = $('#qa-assignee');
 
       const title = titleInput.value.trim();
-      const due = dueInput.value;
-      const priority = priorityInput.value || 'medium';
-      const assignee = assigneeInput.value.trim();
-      
-      // Validate all inputs
-      if (!Validator.task.title(title)) {
-        showNotification('제목은 1-200자 사이여야 합니다.', 'error');
-        titleInput.focus();
-        return;
-      }
-      if (!Validator.task.priority(priority)) {
-        showNotification('올바른 우선순위를 선택해주세요.', 'error');
-        return;
-      }
-      if (!Validator.task.assignee(assignee)) {
-        showNotification('담당자는 50자 이하의 한글, 영문, 공백만 입력 가능합니다.', 'error');
-        assigneeInput.focus();
-        return;
-      }
-      if (!Validator.task.date(due)) {
-        showNotification('올바른 날짜를 입력해주세요.', 'error');
-        dueInput.focus();
-        return;
-      }
+      if (!title) { showNotification('작업 제목을 입력해주세요.', 'error'); titleInput.focus(); return; }
 
       try {
-        const dueDate = due ? new Date(due).toISOString() : null;
-        const cleanAssignee = assignee || null;
+        const due = dueInput.value ? new Date(dueInput.value).toISOString() : null;
+        const priority = priorityInput.value || 'medium';
+        const assignee = assigneeInput.value.trim() || null;
 
         const task = {
           id: uid(),
-          title: Sanitizer.html(title),
-          due: dueDate,
-          priority: priority,
-          assignee: cleanAssignee ? Sanitizer.html(cleanAssignee) : null,
+          title,
+          due,
+          priority,
+          assignee,
           completed: false,
           starred: false,
           tags: [],
@@ -1238,7 +879,8 @@
         render();
         titleInput.focus();
       } catch (error) {
-        ErrorHandler.handle(error, 'addNewTask', '작업 추가에 실패했습니다.');
+        console.error('작업 추가 실패:', error);
+        showNotification('작업 추가에 실패했습니다.', 'error');
       }
     }
 
@@ -1261,7 +903,8 @@
         state.selected.clear();
         render();
       } catch (error) {
-        ErrorHandler.handle(error, 'handleBulkComplete', '일괄 완료에 실패했습니다.');
+        console.error('일괄 완료 실패:', error);
+        showNotification('일괄 완료에 실패했습니다.', 'error');
       }
     }
 
@@ -1276,7 +919,8 @@
         showNotification(`${idsToDelete.length}개 작업이 삭제되었습니다.`, 'success');
         render();
       } catch (error) {
-        ErrorHandler.handle(error, 'handleBulkDelete', '일괄 삭제에 실패했습니다.');
+        console.error('일괄 삭제 실패:', error);
+        showNotification('일괄 삭제에 실패했습니다.', 'error');
       }
     }
 
@@ -1291,22 +935,8 @@
         showNotification('모든 데이터가 삭제되었습니다.', 'success');
         render();
       } catch (error) {
-        ErrorHandler.handle(error, 'handleReset', '데이터 초기화에 실패했습니다.');
-      }
-    }
-
-    /**
-     * Test Case 2: Month Navigation
-     * Navigate to previous or next month
-     */
-    function navigateMonth(direction) {
-      const newMonth = new Date(state.currentMonth);
-      newMonth.setMonth(newMonth.getMonth() + direction);
-      state.currentMonth = newMonth;
-      
-      if (state.view === 'monthly') {
-        renderMonthlyCalendar();
-        renderCounts(); // 월 변경 시 카운트 업데이트
+        console.error('데이터 초기화 실패:', error);
+        showNotification('데이터 초기화에 실패했습니다.', 'error');
       }
     }
 
@@ -1317,80 +947,10 @@
       if (isCtrlOrCmd && e.key.toLowerCase() === 'b') { e.preventDefault(); handleBulkComplete(); }
       if (isCtrlOrCmd && e.key.toLowerCase() === 'd') { e.preventDefault(); handleBulkDelete(); }
       if (e.key === 'Escape' && state.selected.size > 0) { state.selected.clear(); render(); }
-      
-      // 월간 보기에서 화살표 키로 월 네비게이션
-      if (state.view === 'monthly') {
-        if (e.key === 'ArrowLeft') { e.preventDefault(); navigateMonth(-1); }
-        if (e.key === 'ArrowRight') { e.preventDefault(); navigateMonth(1); }
-      }
     }
 
-    // ===================== Security & Validation =====================
-    const Sanitizer = {
-      html(text) {
-        if (typeof text !== 'string') return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-      },
-      
-      attribute(text) {
-        if (typeof text !== 'string') return '';
-        return text.replace(/[&<>"']/g, (char) => ({
-          '&': '&amp;', '<': '&lt;', '>': '&gt;',
-          '"': '&quot;', "'": '&#39;'
-        })[char]);
-      }
-    };
-
-    const Validator = {
-      task: {
-        title: (value) => {
-          if (!value || typeof value !== 'string') return false;
-          const trimmed = value.trim();
-          return trimmed.length > 0 && trimmed.length <= 200;
-        },
-        
-        priority: (value) => ['low', 'medium', 'high'].includes(value),
-        
-        assignee: (value) => {
-          if (!value) return true; // Optional field
-          if (typeof value !== 'string') return false;
-          const trimmed = value.trim();
-          return trimmed.length <= 50 && /^[가-힣a-zA-Z\s]+$/.test(trimmed);
-        },
-        
-        date: (dateString) => {
-          if (!dateString) return true; // Optional field
-          const date = new Date(dateString);
-          return !isNaN(date.getTime()) && date.getFullYear() > 1900 && date.getFullYear() < 2100;
-        }
-      }
-    };
-
-    // Error Handler
-    const ErrorHandler = {
-      handle(error, context, userMessage = '작업 수행 중 오류가 발생했습니다.') {
-        console.error(`Error in ${context}:`, error);
-        this.reportError(error, context);
-        showNotification(userMessage, 'error');
-      },
-      
-      reportError(error, context) {
-        // In production, this would send to error tracking service
-        const errorReport = {
-          message: error.message,
-          stack: error.stack,
-          context: context,
-          timestamp: new Date().toISOString(),
-          userAgent: navigator.userAgent
-        };
-        console.warn('Error report:', errorReport);
-      }
-    };
-
-    // Legacy function for backward compatibility
-    function escapeHtml(text) { return Sanitizer.html(text); }
+    // ===================== Utility Functions =====================
+    function escapeHtml(text) { if (typeof text !== 'string') return ''; const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
 
     // ===================== Data Loading =====================
     async function loadTasks() {
@@ -1410,8 +970,9 @@
         render();
         console.log(`${state.tasks.length}개의 작업을 로드했습니다.`);
       } catch (error) {
-        ErrorHandler.handle(error, 'loadTasks', '작업 로드에 실패했습니다.');
+        console.error('작업 로드 실패:', error);
         setLoading(false);
+        showNotification('작업 로드에 실패했습니다.', 'error');
       }
     }
 
@@ -1424,7 +985,8 @@
         setTimeout(() => { $('#qa-title').focus(); }, 100);
         console.log('TaskFlow Pro 초기화 완료!');
       } catch (error) {
-        ErrorHandler.handle(error, 'init', '앱 초기화에 실패했습니다.');
+        console.error('앱 초기화 실패:', error);
+        showNotification('앱 초기화에 실패했습니다.', 'error');
       }
     }
 
