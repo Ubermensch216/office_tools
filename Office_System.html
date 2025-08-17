@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Office Suite</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500&display=swap');
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: 'Noto Sans KR', sans-serif;
+            overflow: hidden; /* 스크롤바 제거 */
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+        .main-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            background: linear-gradient(to right, #0288D1, #D81B60);
+            color: white;
+            flex-shrink: 0; /* 헤더 크기 고정 */
+        }
+        .logo {
+            font-size: 1.5em;
+            font-weight: 500;
+        }
+        .main-nav {
+            display: flex;
+        }
+        .nav-button {
+            background: none;
+            border: none;
+            color: white;
+            padding: 15px 20px;
+            cursor: pointer;
+            font-size: 1em;
+            font-family: inherit;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .nav-button:hover, .nav-button.active {
+            background-color: #F06292;
+        }
+        .content-frame {
+            flex-grow: 1; /* 남은 공간 모두 차지 */
+            border: none;
+        }
+        #toolFrame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .main-footer-bar {
+            padding: 10px 20px;
+            background-color: #01579B;
+            color: #e3f2fd;
+            text-align: center;
+            font-size: 0.85em;
+            flex-shrink: 0;
+            border-top: 1px solid #0277BD;
+        }
+    </style>
+</head>
+<body>
+    <header class="main-header">
+        <div class="logo">Office Suite</div>
+        <nav class="main-nav" id="mainNav"></nav>
+    </header>
+    <main class="content-frame">
+        <iframe id="toolFrame"></iframe>
+    </main>
+
+    <footer class="main-footer-bar">
+        © 사하구청 All Rights Reserved.
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const welcomeContent = `
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Office Suite</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            max-width: 800px;
+            padding: 40px;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            font-size: 2.5em;
+            color: #0288D1;
+            margin-bottom: 20px;
+        }
+        p {
+            font-size: 1.2em;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .footer {
+            font-size: 0.9em;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>&#x1F4BC; Office Suite에 오신 것을 환영합니다.</h1>
+        <p>
+            이 시스템은 다양한 업무 도구를 하나로 통합하여 제공합니다.<br>
+            상단의 메뉴를 클릭하여 원하는 도구를 시작하세요.
+        </p>
+        <div class="footer">
+            모든 도구는 현재 창 내에서 원활하게 작동합니다.
+        </div>
+    </div>
+</body>
+</html>
+`;
+
+            // --- 확장성 포인트 --- 
+            // 새로운 도구를 추가하려면 이 배열에 객체만 추가하면 됩니다.
+            // { name: '메뉴에 표시될 이름', url: '파일 경로' }
+            const tools = [
+                { name: '투두엔드(TodoEnd)', url: 'tools/todoend.html' },
+                { name: '문짝(문서병합/분할)', url: 'tools/moonJJak.html' },
+                { name: '시트(Sheet) 合', url: 'tools/sheethap.html' },
+                { name: '간단 이미지', url: 'tools/Gandan_Image.html' },
+                { name: '마이비트 알람', url: 'tools/MyBeat_Alarm.html' },
+                { name: '빅타이머', url: 'tools/Big_Timer(v1.2).html' }    
+            ];
+
+            const mainNav = document.getElementById('mainNav');
+            const toolFrame = document.getElementById('toolFrame');
+            let currentActiveButton = null;
+
+            // 초기 화면 설정 (데이터 URI 사용)
+            toolFrame.src = `data:text/html;charset=utf-8,${encodeURIComponent(welcomeContent)}`;
+
+            // tools 배열을 기반으로 동적으로 메뉴 버튼 생성
+            tools.forEach(tool => {
+                const button = document.createElement('button');
+                button.textContent = tool.name;
+                button.classList.add('nav-button');
+                button.dataset.url = tool.url; // 데이터 속성에 URL 저장
+                mainNav.appendChild(button);
+            });
+
+            // 내비게이션 클릭 이벤트 처리 (이벤트 위임 사용)
+            mainNav.addEventListener('click', (event) => {
+                const target = event.target;
+                if (target.classList.contains('nav-button')) {
+                    const url = target.dataset.url;
+                    if (url) {
+                        toolFrame.src = url;
+                        
+                        // 활성 버튼 스타일 관리
+                        if (currentActiveButton) {
+                            currentActiveButton.classList.remove('active');
+                        }
+                        target.classList.add('active');
+                        currentActiveButton = target;
+                    }
+                }
+            });
+
+            // 로고 클릭 시 환영 페이지로 이동
+            document.querySelector('.logo').addEventListener('click', () => {
+                toolFrame.src = `data:text/html;charset=utf-8,${encodeURIComponent(welcomeContent)}`;
+                if (currentActiveButton) {
+                    currentActiveButton.classList.remove('active');
+                    currentActiveButton = null;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

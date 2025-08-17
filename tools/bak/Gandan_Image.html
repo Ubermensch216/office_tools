@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>간단 이미지</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Cropper.js for image cropping -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- JSZip for batch downloading -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f0f9ff; }
+        .drop-zone { border: 2px dashed #e0f2fe; transition: background-color 0.3s ease, border-color 0.3s ease; }
+        .drop-zone.drag-over { background-color: #e0f2fe; border-color: #0ea5e9; }
+        .spinner { border-top-color: #0ea5e9; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        .tab-btn.active { border-color: #0ea5e9; color: #0ea5e9; background-color: #f0f9ff; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        /* Cropper.js needs a block-level image */
+        .cropper-container img { display: block; max-width: 100%; }
+        
+        /* 추가된 애니메이션 스타일 */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fadeIn { animation: fadeIn 0.5s ease-out; }
+        
+        /* 이미지 미리보기 호버 효과 */
+        .preview-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* 편집 도구 버튼 스타일 개선 */
+        .edit-btn {
+            transition: all 0.2s ease;
+        }
+        .edit-btn:hover {
+            transform: scale(1.05);
+        }
+        
+        /* 로딩 애니메이션 개선 */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse {
+            animation: pulse 1.5s ease infinite;
+        }
+    </style>
+</head>
+<body class="text-slate-800 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-5xl bg-white rounded-xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl">
+        <header class="bg-gradient-to-r from-sky-500 to-sky-600 text-white p-6 text-center shadow-md">
+            <h1 class="text-2xl md:text-3xl font-bold">간단 이미지</h1>
+            <p class="text-sky-100 mt-1 text-sm">이미지를 편집하고 원하는 형식으로 변환하세요.</p>
+        </header>
+
+        <main class="p-6 md:p-8 bg-slate-50">
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                
+                <!-- Left Column: File Input & List -->
+                <section class="lg:col-span-2 flex flex-col p-5 bg-white rounded-xl border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-md">
+                    <h2 class="text-xl font-semibold mb-4 text-slate-700 flex items-center gap-2.5">
+                        <span class="bg-gradient-to-r from-sky-500 to-sky-600 text-white text-sm font-bold rounded-full w-7 h-7 flex items-center justify-center shadow">1</span>
+                        파일 선택
+                    </h2>
+                    <div id="dropZone" class="drop-zone w-full h-40 rounded-lg flex flex-col items-center justify-center text-center p-4 cursor-pointer hover:bg-sky-50 transition-all duration-300">
+                        <svg class="w-10 h-10 text-slate-400 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l-3 3m3-3l3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" /></svg>
+                        <p class="text-slate-600 font-medium">여기에 파일을 드래그하거나 클릭</p>
+                        <input type="file" id="fileInput" class="hidden" multiple accept="image/jpeg, image/png, image/gif, image/webp, image/bmp">
+                    </div>
+                    <div id="previewContainer" class="mt-4 space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                        <!-- File list will be shown here -->
+                    </div>
+                </section>
+
+                <!-- Right Column: Editor & Options -->
+                <section class="lg:col-span-3 flex flex-col p-5 bg-white rounded-xl border border-slate-200 shadow-sm min-h-[70vh] transition-all duration-300 hover:shadow-md">
+                    <!-- Tabs -->
+                    <div class="border-b border-slate-200 mb-4">
+                        <nav class="-mb-px flex space-x-4" aria-label="Tabs">
+                            <button id="tabEdit" class="tab-btn active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-all duration-200">간단 편집</button>
+                            <button id="tabConvert" class="tab-btn whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-all duration-200">이미지 변환</button>
+                        </nav>
+                    </div>
+
+                    <!-- Editor Container -->
+                    <div id="editor-wrapper" class="flex-grow bg-slate-100 rounded-lg flex items-center justify-center min-h-[40vh] relative">
+                        <!-- Placeholder -->
+                        <div id="editor-placeholder" class="text-center text-slate-400 p-4">
+                            <svg class="w-16 h-16 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                            </svg>
+                            <p class="font-medium">편집할 이미지를 선택하세요</p>
+                            <p class="text-sm">왼쪽 목록에서 파일을 선택하거나<br>새 파일을 업로드해주세요.</p>
+                        </div>
+                        <img id="imageEditor" class="hidden" alt="Editor Preview">
+                    </div>
+
+                    <!-- Edit Panel (회전, 자르기) -->
+                    <div id="panelEdit" class="tab-panel active mt-4">
+                        <div class="flex items-center justify-center gap-3">
+                            <button id="btnRotateLeft" class="edit-btn p-2 bg-slate-200 rounded-lg hover:bg-sky-100 transition-all duration-200" title="좌로 회전">
+                                <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-6 6m0 0l6-6m-6 6h12a6 6 0 000-12h-3" /></svg>
+                            </button>
+                            <button id="btnRotateRight" class="edit-btn p-2 bg-slate-200 rounded-lg hover:bg-sky-100 transition-all duration-200" title="우로 회전">
+                                <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15l6 6m0 0l-6-6m6 6V9a6 6 0 00-12 0v3" /></svg>
+                            </button>
+                            <button id="btnCrop" class="edit-btn p-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 font-semibold px-4 transition-all duration-200">자르기 적용</button>
+                        </div>
+                    </div>
+
+                    <!-- Convert Panel (이미지 크기, 저장 형식, 파일 크기 비율) -->
+                    <div id="panelConvert" class="tab-panel mt-4">
+                        <div class="space-y-5">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-600 mb-2">이미지 크기 (px)</label>
+                                <div class="flex items-center space-x-3">
+                                    <input type="number" id="widthInput" placeholder="가로" class="w-full p-2.5 bg-white border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition">
+                                    <span class="text-slate-400 font-light">×</span>
+                                    <input type="number" id="heightInput" placeholder="세로" class="w-full p-2.5 bg-white border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition">
+                                </div>
+                            </div>
+                            <div id="dimensionContainer" class="hidden">
+                                <label for="dimensionSlider" class="block text-sm font-medium text-slate-600 mb-2">크기 조절 (%): <span id="dimensionValue" class="font-semibold text-sky-600">100%</span></label>
+                                <input type="range" id="dimensionSlider" min="10" max="200" step="1" value="100" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500">
+                            </div>
+                            <div>
+                                <label for="formatSelect" class="block text-sm font-medium text-slate-600 mb-2">저장 형식</label>
+                                <select id="formatSelect" class="w-full p-2.5 bg-white border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition">
+                                    <option value="jpeg">JPEG</option>
+                                    <option value="png">PNG</option>
+                                    <option value="webp">WEBP</option>
+                                    <option value="ico">ICO</option>
+                                </select>
+                            </div>
+                            <div id="ratioContainer">
+                                <label for="sizeRatioSlider" class="block text-sm font-medium text-slate-600 mb-2">파일 크기 비율: <span id="sizeRatioValue" class="font-semibold text-sky-600">80%</span></label>
+                                <input type="range" id="sizeRatioSlider" min="0.1" max="1" step="0.05" value="0.8" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500">
+                                <p class="text-xs text-slate-500 mt-2">JPEG, WEBP 형식에 적용됩니다.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 공통 버튼 영역 (두 탭에 모두 표시) -->
+                    <div class="mt-6 pt-4 border-t border-slate-200">
+                        <button id="convertBtn" class="w-full bg-sky-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-300 disabled:bg-slate-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all duration-300 shadow hover:shadow-lg" disabled>
+                            <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                            <span>이미지 변환 및 저장</span>
+                        </button>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <footer class="text-center text-sm text-slate-500 py-6">ⓒ 사하구 기획실 업무혁신계 All Rights Reserved.</footer>
+    <div id="loadingOverlay" class="fixed inset-0 bg-white bg-opacity-70 flex items-center justify-center hidden z-50 backdrop-blur-sm">
+        <div class="flex flex-col items-center">
+            <div class="spinner w-16 h-16 border-4 border-slate-200 rounded-full animate-pulse"></div>
+            <p class="mt-4 font-medium text-slate-600">이미지 처리 중...</p>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const previewContainer = document.getElementById('previewContainer');
+        const imageEditor = document.getElementById('imageEditor');
+        const editorWrapper = document.getElementById('editor-wrapper');
+        const editorPlaceholder = document.getElementById('editor-placeholder');
+        const convertBtn = document.getElementById('convertBtn');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        // Tabs
+        const tabEdit = document.getElementById('tabEdit');
+        const tabConvert = document.getElementById('tabConvert');
+        const panelEdit = document.getElementById('panelEdit');
+        const panelConvert = document.getElementById('panelConvert');
+        // Edit Controls
+        const btnRotateLeft = document.getElementById('btnRotateLeft');
+        const btnRotateRight = document.getElementById('btnRotateRight');
+        const btnCrop = document.getElementById('btnCrop');
+        // Convert Controls
+        const widthInput = document.getElementById('widthInput');
+        const heightInput = document.getElementById('heightInput');
+        const dimensionContainer = document.getElementById('dimensionContainer');
+        const dimensionSlider = document.getElementById('dimensionSlider');
+        const dimensionValue = document.getElementById('dimensionValue');
+        const formatSelect = document.getElementById('formatSelect');
+        const ratioContainer = document.getElementById('ratioContainer');
+        const sizeRatioSlider = document.getElementById('sizeRatioSlider');
+        const sizeRatioValue = document.getElementById('sizeRatioValue');
+
+        // --- State Variables ---
+        let filesData = []; // { id, file, originalSrc, editedSrc }
+        let activeFileId = null;
+        let cropper = null;
+        let originalDimensions = { width: 0, height: 0, aspectRatio: 1 };
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            // 초기 설정: Edit 탭 활성화 및 버튼 상태 업데이트
+            tabEdit.classList.add('active');
+            panelEdit.classList.add('active');
+            updateRatioSliderVisibility();
+            updateConvertButtonState();
+        });
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+            dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+            dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); });
+            dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
+            
+            tabEdit.addEventListener('click', () => switchTab('edit'));
+            tabConvert.addEventListener('click', () => switchTab('convert'));
+
+            btnRotateLeft.addEventListener('click', () => cropper?.rotate(-90));
+            btnRotateRight.addEventListener('click', () => cropper?.rotate(90));
+            btnCrop.addEventListener('click', applyCrop);
+
+            previewContainer.addEventListener('click', handlePreviewClick);
+            convertBtn.addEventListener('click', processAllImages);
+
+            formatSelect.addEventListener('change', updateRatioSliderVisibility);
+            sizeRatioSlider.addEventListener('input', () => sizeRatioValue.textContent = `${Math.round(sizeRatioSlider.value * 100)}%`);
+            dimensionSlider.addEventListener('input', handleDimensionSlider);
+            widthInput.addEventListener('input', () => handleDimensionInput('width'));
+            heightInput.addEventListener('input', () => handleDimensionInput('height'));
+        }
+
+        // --- File Handling ---
+        function handleFiles(files) {
+            if (!files || files.length === 0) return;
+            
+            const newFiles = Array.from(files).filter(file => !filesData.some(fd => fd.file.name === file.name && fd.file.size === file.size));
+            
+            if (newFiles.length > 0) {
+                newFiles.forEach(file => {
+                    const id = Date.now() + Math.random();
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        filesData.push({ id, file, originalSrc: e.target.result, editedSrc: e.target.result });
+                        renderPreviewList();
+                        if (filesData.length === 1) {
+                            setActiveFile(id);
+                        }
+                        updateConvertButtonState();
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+        }
+
+        function renderPreviewList() {
+            previewContainer.innerHTML = '';
+            
+            if (filesData.length === 0) {
+                previewContainer.innerHTML = '<p class="text-center text-slate-500 py-3">업로드된 파일이 없습니다</p>';
+                return;
+            }
+            
+            filesData.forEach(data => {
+                const isActive = data.id === activeFileId;
+                const el = document.createElement('div');
+                el.className = `preview-item flex items-center justify-between p-2.5 rounded-lg border transition-all duration-300 cursor-pointer ${isActive ? 'bg-sky-100 border-sky-400' : 'bg-white border-slate-200 hover:border-sky-300'}`;
+                el.dataset.id = data.id;
+                el.innerHTML = `
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <img src="${data.editedSrc}" alt="${data.file.name}" class="w-10 h-10 object-cover rounded-md flex-shrink-0">
+                        <div class="text-sm overflow-hidden">
+                            <p class="font-medium text-slate-800 truncate">${data.file.name}</p>
+                            <p class="text-slate-500">${(data.file.size / 1024).toFixed(1)} KB</p>
+                        </div>
+                    </div>
+                    <button data-id="${data.id}" class="remove-btn p-1.5 text-slate-400 hover:bg-red-100 hover:text-red-500 rounded-full transition-colors flex-shrink-0">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>`;
+                previewContainer.appendChild(el);
+            });
+        }
+
+        function handlePreviewClick(e) {
+            const id = e.target.closest('[data-id]')?.dataset.id;
+            if (!id) return;
+
+            if (e.target.closest('.remove-btn')) {
+                removeFile(id);
+            } else {
+                setActiveFile(id);
+            }
+        }
+
+        function removeFile(id) {
+            filesData = filesData.filter(data => data.id != id);
+            renderPreviewList();
+            if (activeFileId == id) {
+                setActiveFile(filesData.length > 0 ? filesData[0].id : null);
+            }
+            updateConvertButtonState();
+        }
+
+        function setActiveFile(id) {
+            activeFileId = id;
+            const fileData = filesData.find(fd => fd.id == id);
+            
+            if (fileData) {
+                initEditor(fileData.editedSrc);
+                updateDimensionControls(fileData.editedSrc);
+            } else {
+                destroyCropper();
+                updateDimensionControls(null);
+                
+                // 파일이 없을 때 placeholder 표시
+                editorPlaceholder.classList.remove('hidden');
+                imageEditor.classList.add('hidden');
+            }
+            
+            renderPreviewList();
+        }
+
+        // --- Editor (Cropper.js) ---
+        function initEditor(src) {
+            if (!src) return;
+            
+            // 플레이스홀더 숨기기 및 이미지 표시
+            editorPlaceholder.classList.add('hidden');
+            imageEditor.classList.remove('hidden');
+            
+            destroyCropper();
+            imageEditor.src = src;
+            
+            // 이미지가 로드된 후 cropper 초기화
+            imageEditor.onload = function() {
+                cropper = new Cropper(imageEditor, {
+                    viewMode: 1,
+                    background: false,
+                    autoCropArea: 0.8,
+                    responsive: true,
+                    ready: function() {
+                        // Cropper가 준비되면 이미지 에디터에 애니메이션 클래스 추가
+                        editorWrapper.classList.add('animate-fadeIn');
+                    }
+                });
+            };
+        }
+
+        function destroyCropper() {
+            if (cropper) {
+                cropper.destroy();
+                cropper = null;
+            }
+        }
+
+        function applyCrop() {
+            if (!cropper || !activeFileId) return;
+            
+            const canvas = cropper.getCroppedCanvas();
+            if (!canvas) return;
+            
+            const fileData = filesData.find(fd => fd.id == activeFileId);
+            if (fileData) {
+                fileData.editedSrc = canvas.toDataURL(fileData.file.type);
+                initEditor(fileData.editedSrc);
+                renderPreviewList();
+            }
+        }
+
+        // --- UI & Controls ---
+        function switchTab(tabName) {
+            // 모든 탭과 패널 비활성화
+            [tabEdit, tabConvert].forEach(tab => tab.classList.remove('active'));
+            [panelEdit, panelConvert].forEach(panel => panel.classList.remove('active'));
+            
+            // 선택한 탭과 패널 활성화
+            if (tabName === 'edit') {
+                tabEdit.classList.add('active');
+                panelEdit.classList.add('active');
+            } else {
+                tabConvert.classList.add('active');
+                panelConvert.classList.add('active');
+            }
+        }
+
+        function updateConvertButtonState() {
+            // 파일이 있을 때만 변환 버튼 활성화
+            convertBtn.disabled = filesData.length === 0;
+        }
+
+        function updateRatioSliderVisibility() {
+            const format = formatSelect.value;
+            ratioContainer.style.display = (format === 'jpeg' || format === 'webp') ? 'block' : 'none';
+        }
+
+        function updateDimensionControls(src) {
+            if (!src) {
+                dimensionContainer.classList.add('hidden');
+                widthInput.value = '';
+                heightInput.value = '';
+                originalDimensions = { width: 0, height: 0, aspectRatio: 1 };
+                return;
+            }
+            
+            const img = new Image();
+            img.onload = () => {
+                originalDimensions = { 
+                    width: img.width, 
+                    height: img.height, 
+                    aspectRatio: img.width / img.height 
+                };
+                
+                widthInput.value = img.width;
+                heightInput.value = img.height;
+                dimensionSlider.value = 100;
+                dimensionValue.textContent = '100%';
+                dimensionContainer.classList.remove('hidden');
+            };
+            img.src = src;
+        }
+
+        function handleDimensionSlider() {
+            if (originalDimensions.width === 0) return;
+            
+            const percentage = dimensionSlider.value / 100;
+            widthInput.value = Math.round(originalDimensions.width * percentage);
+            heightInput.value = Math.round(originalDimensions.height * percentage);
+            dimensionValue.textContent = `${dimensionSlider.value}%`;
+        }
+
+        function handleDimensionInput(changedInput) {
+            if (originalDimensions.width === 0) return;
+            
+            const newWidth = parseInt(widthInput.value, 10);
+            const newHeight = parseInt(heightInput.value, 10);
+
+            if (changedInput === 'width' && !isNaN(newWidth) && newWidth > 0) {
+                heightInput.value = Math.round(newWidth / originalDimensions.aspectRatio);
+                const percentage = Math.round((newWidth / originalDimensions.width) * 100);
+                dimensionSlider.value = percentage;
+                dimensionValue.textContent = `${percentage}%`;
+            } else if (changedInput === 'height' && !isNaN(newHeight) && newHeight > 0) {
+                widthInput.value = Math.round(newHeight * originalDimensions.aspectRatio);
+                const percentage = Math.round((newHeight / originalDimensions.height) * 100);
+                dimensionSlider.value = percentage;
+                dimensionValue.textContent = `${percentage}%`;
+            }
+        }
+
+        // --- Conversion Logic ---
+        async function processAllImages() {
+            if (filesData.length === 0) return;
+            
+            loadingOverlay.classList.remove('hidden');
+            
+            const options = {
+                width: widthInput.value ? parseInt(widthInput.value, 10) : null,
+                height: heightInput.value ? parseInt(heightInput.value, 10) : null,
+                format: formatSelect.value,
+                quality: parseFloat(sizeRatioSlider.value)
+            };
+
+            const conversionPromises = filesData.map(data => convertImage(data, options));
+            
+            try {
+                const results = await Promise.all(conversionPromises);
+                alert(`${results.length}개의 이미지 변환이 완료되었습니다.`);
+            } catch (error) {
+                console.error('이미지 변환 중 오류 발생:', error);
+                alert('이미지 변환 중 오류가 발생했습니다.');
+            } finally {
+                loadingOverlay.classList.add('hidden');
+                filesData = []; 
+                activeFileId = null; 
+                renderPreviewList(); 
+                destroyCropper(); 
+                updateDimensionControls(null); 
+                updateConvertButtonState();
+                editorPlaceholder.classList.remove('hidden');
+                imageEditor.classList.add('hidden');
+                fileInput.value = '';
+            }
+        }
+
+        function convertImage(fileData, options) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = async () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    let { width, height } = options;
+                    const aspectRatio = img.width / img.height;
+
+                    if (!width && !height) { width = img.width; height = img.height; }
+                    else if (width && !height) { height = Math.round(width / aspectRatio); }
+                    else if (!width && height) { width = Math.round(height * aspectRatio); }
+                    
+                    canvas.width = width; 
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    try {
+                        let blob;
+                        if (options.format === 'ico') {
+                            blob = await createIcoBlob(canvas);
+                        } else {
+                            const mimeType = `image/${options.format}`;
+                            const quality = (options.format === 'jpeg' || options.format === 'webp') ? options.quality : undefined;
+                            blob = await new Promise(res => canvas.toBlob(res, mimeType, quality));
+                        }
+                        
+                        if (!blob) throw new Error('Blob 생성 실패');
+                        
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = `${fileData.file.name.substring(0, fileData.file.name.lastIndexOf('.'))}_optimized.${options.format}`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(link.href);
+                        resolve({ success: true });
+                    } catch (err) { 
+                        reject(err); 
+                    }
+                };
+                img.onerror = () => reject(new Error('이미지를 로드할 수 없습니다.'));
+                img.src = fileData.editedSrc; // Use the (potentially) edited source
+            });
+        }
+
+        function createIcoBlob(canvas) {
+            return new Promise((resolve, reject) => {
+                canvas.toBlob(async (pngBlob) => {
+                    if (!pngBlob) return reject(new Error('PNG Blob 생성 실패'));
+                    
+                    const pngBuffer = await pngBlob.arrayBuffer();
+                    const icoBuffer = new ArrayBuffer(22 + pngBuffer.byteLength);
+                    const view = new DataView(icoBuffer);
+                    
+                    // ICO 헤더 작성
+                    view.setUint16(0, 0, true); 
+                    view.setUint16(2, 1, true); 
+                    view.setUint16(4, 1, true);
+                    
+                    const w = canvas.width >= 256 ? 0 : canvas.width;
+                    const h = canvas.height >= 256 ? 0 : canvas.height;
+                    
+                    view.setUint8(6, w); 
+                    view.setUint8(7, h); 
+                    view.setUint8(8, 0); 
+                    view.setUint8(9, 0);
+                    view.setUint16(10, 1, true); 
+                    view.setUint16(12, 32, true);
+                    view.setUint32(14, pngBuffer.byteLength, true); 
+                    view.setUint32(18, 22, true);
+                    
+                    // PNG 데이터 추가
+                    new Uint8Array(icoBuffer).set(new Uint8Array(pngBuffer), 22);
+                    resolve(new Blob([icoBuffer], { type: 'image/x-icon' }));
+                }, 'image/png');
+            });
+        }
+    </script>
+</body>
+</html>
