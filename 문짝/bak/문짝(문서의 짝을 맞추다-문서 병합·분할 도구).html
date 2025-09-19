@@ -8,7 +8,6 @@
     <!-- 외부 라이브러리 CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     
     <style>
         * {
@@ -770,11 +769,11 @@
                 <div class="drop-zone" id="drop-zone">
                     <div class="drop-zone-icon">📁</div>
                     <div class="drop-zone-text">파일을 드래그하세요</div>
-                    <div class="drop-zone-hint">PDF, XLSX, TXT, ODT 지원</div>
+                    <div class="drop-zone-hint">PDF, XLSX, TXT 지원</div>
                     <label for="file-input" class="browse-btn">
                         파일 선택
                     </label>
-                    <input type="file" id="file-input" class="file-input" multiple accept=".pdf,.xlsx,.txt,.odt">
+                    <input type="file" id="file-input" class="file-input" multiple accept=".pdf,.xlsx,.txt">
                 </div>
                 
                 <div id="file-order-hint" class="file-order-hint">
@@ -920,40 +919,6 @@
                             </div>
                         </div>
                     </div>
-
-                    <div id="odt-split-options" class="split-options" style="display: none;">
-                        <label class="split-option">
-                            <input type="radio" name="odt-split-type" value="range" checked onclick="toggleOdtSplitOption('range')">
-                            <div class="split-label">
-                                <div class="split-title">특정 문단 범위 분할</div>
-                                <div class="split-description">지정한 문단 범위만 추출</div>
-                            </div>
-                        </label>
-                        
-                        <div id="odt-range-input-container" class="split-input-container visible">
-                            <div class="form-group">
-                                <label class="form-label">분할 범위</label>
-                                <input type="text" id="odt-split-range" class="form-input" placeholder="예: 1-10, 15, 20-25">
-                                <p class="form-hint">문단 번호를 입력하세요</p>
-                            </div>
-                        </div>
-                        
-                        <label class="split-option">
-                            <input type="radio" name="odt-split-type" value="chunk" onclick="toggleOdtSplitOption('chunk')">
-                            <div class="split-label">
-                                <div class="split-title">문단 단위 분할</div>
-                                <div class="split-description">지정한 문단 수마다 파일 분할</div>
-                            </div>
-                        </label>
-                        
-                        <div id="odt-chunk-input-container" class="split-input-container">
-                            <div class="form-group">
-                                <label class="form-label">분할 문단 분량</label>
-                                <input type="number" id="odt-split-chunk-size" class="form-input" placeholder="예: 50" min="1" value="50">
-                                <p class="form-hint">각 파일당 문단 수를 입력하세요</p>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
             
@@ -990,7 +955,6 @@
         let currentSplitType = 'range';
         let currentExcelSplitType = 'sheet';
         let currentTxtSplitType = 'range';
-        let currentOdtSplitType = 'range';
         let draggedItem = null;
         let draggedIndex = null;
         let generatedFiles = [];
@@ -1029,38 +993,23 @@
             document.getElementById('txt-range-input-container').classList.toggle('visible', type === 'range');
             document.getElementById('txt-chunk-input-container').classList.toggle('visible', type === 'chunk');
         }
-
-        // 분할 옵션 전환 (ODT용)
-        function toggleOdtSplitOption(type) {
-            currentOdtSplitType = type;
-            
-            document.getElementById('odt-range-input-container').classList.toggle('visible', type === 'range');
-            document.getElementById('odt-chunk-input-container').classList.toggle('visible', type === 'chunk');
-        }
         
         // 파일 유형에 따라 분할 옵션 표시 변경
         function updateSplitOptions() {
             const validFiles = selectedFiles.filter(f => !f.hasError);
             
-            document.getElementById('pdf-split-options').style.display = 'none';
-            document.getElementById('excel-split-options').style.display = 'none';
-            document.getElementById('txt-split-options').style.display = 'none';
-            document.getElementById('odt-split-options').style.display = 'none';
-
             if (validFiles.length === 1) {
                 const fileType = validFiles[0].type;
                 
-                if (fileType === 'pdf') document.getElementById('pdf-split-options').style.display = 'block';
+                document.getElementById('pdf-split-options').style.display = fileType === 'pdf' ? 'block' : 'none';
+                document.getElementById('excel-split-options').style.display = fileType === 'xlsx' ? 'block' : 'none';
+                document.getElementById('txt-split-options').style.display = fileType === 'txt' ? 'block' : 'none';
+                
+                // 상태 초기화
                 if (fileType === 'xlsx') {
-                    document.getElementById('excel-split-options').style.display = 'block';
                     toggleExcelSplitOption('sheet');
                     document.querySelector('input[name="excel-split-type"][value="sheet"]').checked = true;
                 }
-                if (fileType === 'txt') document.getElementById('txt-split-options').style.display = 'block';
-                if (fileType === 'odt') document.getElementById('odt-split-options').style.display = 'block';
-
-            } else {
-                document.getElementById('pdf-split-options').style.display = 'block';
             }
         }
         
@@ -1118,8 +1067,7 @@
             const typeMap = {
                 'pdf': 'PDF',
                 'xlsx': 'Excel',
-                'txt': '텍스트',
-                'odt': 'ODT'
+                'txt': '텍스트'
             };
             
             const fileTypeKor = typeMap[fileType] || '문서';
@@ -1130,12 +1078,12 @@
         function handleFiles(files) {
             const validFiles = files.filter(file => {
                 const extension = file.name.split('.').pop().toLowerCase();
-                return ['pdf', 'xlsx', 'txt', 'odt'].includes(extension);
+                return ['pdf', 'xlsx', 'txt'].includes(extension);
             });
             
             if (validFiles.length !== files.length) {
                 const invalidCount = files.length - validFiles.length;
-                showError('파일 형식 오류', `${invalidCount}개 파일이 지원하지 않는 형식입니다.`, 'PDF, XLSX, TXT, ODT 파일만 업로드 가능합니다.');
+                showError('파일 형식 오류', `${invalidCount}개 파일이 지원하지 않는 형식입니다.`, 'PDF, XLSX, TXT 파일만 업로드 가능합니다.');
             }
             
             validFiles.forEach(file => {
@@ -1221,7 +1169,6 @@
                 case 'pdf': return '📄';
                 case 'xlsx': return '📊';
                 case 'txt': return '📝';
-                case 'odt': return '📄';
                 default: return '📎';
             }
         }
@@ -1272,9 +1219,6 @@
                             break;
                         case 'txt':
                             analyzeTXT(fileInfo, content);
-                            break;
-                        case 'odt':
-                            await analyzeODT(fileInfo, content);
                             break;
                     }
                     
@@ -1384,33 +1328,6 @@
                 fileInfo.hasError = true;
                 fileInfo.details = '분석 실패';
                 showError('텍스트 분석 실패', fileInfo.name, '인코딩 문제가 있을 수 있습니다.');
-            }
-        }
-
-        // ODT 분석
-        async function analyzeODT(fileInfo, content) {
-            try {
-                const zip = await JSZip.loadAsync(content);
-                fileInfo.zip = zip; // Store the zip object
-
-                const contentXmlStr = await zip.file("content.xml").async("string");
-                const parser = new DOMParser();
-                const contentXml = parser.parseFromString(contentXmlStr, "application/xml");
-
-                const paragraphs = contentXml.getElementsByTagName("text:p");
-                fileInfo.paragraphCount = paragraphs.length;
-                fileInfo.details = `${fileInfo.paragraphCount} 문단`;
-
-                if (fileInfo.paragraphCount === 0) {
-                    fileInfo.hasError = true;
-                    fileInfo.details = '빈 ODT';
-                    showError('빈 ODT 파일', fileInfo.name, '문단이 없는 ODT 파일입니다.');
-                }
-            } catch (error) {
-                console.error('ODT 분석 오류:', error);
-                fileInfo.hasError = true;
-                fileInfo.details = '분석 실패';
-                showError('ODT 분석 실패', fileInfo.name, '유효한 ODT 파일이 아니거나 손상되었습니다.');
             }
         }
         
@@ -1687,11 +1604,8 @@
                     case 'txt':
                         mergeTXTs(validFiles, filename);
                         break;
-                    case 'odt':
-                        await mergeODTs(validFiles, filename);
-                        break;
                     default:
-                        showError('지원하지 않는 형식', fileType, 'PDF, XLSX, TXT, ODT 파일만 지원합니다.');
+                        showError('지원하지 않는 형식', fileType, 'PDF, XLSX, TXT 파일만 지원합니다.');
                 }
             } catch (error) {
                 console.error('병합 오류:', error);
@@ -1844,83 +1758,6 @@
                 throw new Error(`텍스트 병합 중 오류: ${error.message}`);
             }
         }
-
-        // ODT 병합
-        async function mergeODTs(odtFiles, filename) {
-            try {
-                if (odtFiles.length === 0) return;
-
-                // 1. Use the first file as the base
-                const baseZip = odtFiles[0].zip;
-                const baseContentStr = await baseZip.file("content.xml").async("string");
-                const baseManifestStr = await baseZip.file("META-INF/manifest.xml").async("string");
-
-                const parser = new DOMParser();
-                const serializer = new XMLSerializer();
-
-                const baseContentXml = parser.parseFromString(baseContentStr, "application/xml");
-                const baseTextNode = baseContentXml.querySelector("office|text, text");
-
-                const baseManifestXml = parser.parseFromString(baseManifestStr, "application/xml");
-                const baseManifestNode = baseManifestXml.querySelector("manifest|manifest, manifest");
-
-                // 2. Iterate through subsequent files
-                for (let i = 1; i < odtFiles.length; i++) {
-                    const fileInfo = odtFiles[i];
-                    const zip = fileInfo.zip;
-
-                    // Add a separator paragraph
-                    const separator = baseContentXml.createElementNS("urn:oasis:names:tc:opendocument:xmlns:text:1.0", "text:p");
-                    separator.textContent = `--- 다음 파일: ${fileInfo.name} ---`;
-                    baseTextNode.appendChild(separator);
-
-                    // 3. Merge content.xml
-                    const contentStr = await zip.file("content.xml").async("string");
-                    const contentXml = parser.parseFromString(contentStr, "application/xml");
-                    const textNode = contentXml.querySelector("office|text, text");
-
-                    if (textNode) {
-                        Array.from(textNode.childNodes).forEach(child => {
-                            const importedNode = baseContentXml.importNode(child, true);
-                            baseTextNode.appendChild(importedNode);
-                        });
-                    }
-
-                    // 4. Merge other files (like images) and update manifest
-                    const manifestStr = await zip.file("META-INF/manifest.xml").async("string");
-                    const manifestXml = parser.parseFromString(manifestStr, "application/xml");
-                    const fileEntries = manifestXml.querySelectorAll("manifest|file-entry, file-entry");
-
-                    for (const fileEntry of fileEntries) {
-                        const fullPath = fileEntry.getAttribute("manifest:full-path") || fileEntry.getAttribute("full-path");
-                        if (fullPath && fullPath !== "/" && !fullPath.startsWith("META-INF") && fullPath !== "content.xml" && fullPath !== "styles.xml") {
-                            if (!baseZip.file(fullPath)) {
-                                const fileData = await zip.file(fullPath).async("uint8array");
-                                baseZip.file(fullPath, fileData);
-                                const importedEntry = baseManifestXml.importNode(fileEntry, true);
-                                baseManifestNode.appendChild(importedEntry);
-                            }
-                        }
-                    }
-                }
-
-                // 5. Save the modified XMLs back to the base zip
-                const newContentStr = serializer.serializeToString(baseContentXml);
-                baseZip.file("content.xml", newContentStr);
-
-                const newManifestStr = serializer.serializeToString(baseManifestXml);
-                baseZip.file("META-INF/manifest.xml", newManifestStr);
-
-                // 6. Generate the final ODT file
-                const odtBytes = await baseZip.generateAsync({ type: "uint8array", mimeType: "application/vnd.oasis.opendocument.text" });
-                const outputFilename = `${filename}.odt`;
-                addDownloadLink(odtBytes, outputFilename, 'application/vnd.oasis.opendocument.text');
-                showStatus('ODT 병합이 완료되었습니다!', 'success');
-
-            } catch (error) {
-                throw new Error(`ODT 병합 중 오류: ${error.message}`);
-            }
-        }
         
         // 파일 분할
         async function splitFiles() {
@@ -1944,6 +1781,7 @@
                                 return;
                             }
                             
+                            // 범위 형식 검증
                             const rangePattern = /^(\d+(-\d+)?)(,\s*\d+(-\d+)?)*$/;
                             if (!rangePattern.test(range.replace(/\s/g, ''))) {
                                 showError('잘못된 범위 형식', range, '올바른 형식: 1-3, 5, 7-10');
@@ -1987,6 +1825,7 @@
                                 return;
                             }
                             
+                            // 범위 형식 검증
                             const rangePattern = /^(\d+(-\d+)?)(,\s*\d+(-\d+)?)*$/;
                             if (!rangePattern.test(range.replace(/\s/g, ''))) {
                                 showError('잘못된 범위 형식', range, '올바른 형식: 1-3, 5, 7-10');
@@ -2003,29 +1842,6 @@
                             }
                             
                             splitTXTByChunks(fileInfo, chunkSize);
-                        }
-                        break;
-
-                    case 'odt':
-                        if (currentOdtSplitType === 'range') {
-                            const range = document.getElementById('odt-split-range').value.trim();
-                            if (!range) {
-                                showError('범위 입력 오류', '분할 범위가 비어있음', '분할할 문단 번호를 입력해주세요.');
-                                return;
-                            }
-                            const rangePattern = /^(\d+(-\d+)?)(,\s*\d+(-\d+)?)*$/;
-                            if (!rangePattern.test(range.replace(/\s/g, ''))) {
-                                showError('잘못된 범위 형식', range, '올바른 형식: 1-10, 15, 20-25');
-                                return;
-                            }
-                            await splitODTByRange(fileInfo, range);
-                        } else if (currentOdtSplitType === 'chunk') {
-                            const chunkSize = parseInt(document.getElementById('odt-split-chunk-size').value);
-                            if (isNaN(chunkSize) || chunkSize <= 0) {
-                                showError('잘못된 문단 분량', '양수 값을 입력해주세요', '각 파일당 문단 수를 1 이상으로 지정해야 합니다.');
-                                return;
-                            }
-                            await splitODTByChunks(fileInfo, chunkSize);
                         }
                         break;
                         
@@ -2244,136 +2060,43 @@
             }
         }
         
+        // TXT 청크 분할
         function splitTXTByChunks(fileInfo, chunkSize) {
             try {
                 if (fileInfo.lineCount === 0) {
-                    throw new Error('라인이 없는 텍스트 파일입니다.');
+                    throw new Error('내용이 없는 텍스트 파일입니다.');
                 }
                 
+                // 전체 라인 수를 기준으로 청크 개수 계산
                 const totalChunks = Math.ceil(fileInfo.lineCount / chunkSize);
                 const fileBase = fileInfo.name.replace('.txt', '');
-                const lines = fileInfo.lines;
                 
+                // 여러 텍스트 파일 생성
                 for (let i = 0; i < totalChunks; i++) {
-                    const startLine = i * chunkSize;
-                    const endLine = startLine + chunkSize;
-                    const chunkLines = lines.slice(startLine, endLine);
-                    const chunkContent = chunkLines.join('\n');
+                    const startLine = i * chunkSize + 1;
+                    const endLine = Math.min((i + 1) * chunkSize, fileInfo.lineCount);
                     
-                    const outputFilename = `${fileBase}_part${i+1}_${startLine + 1}-${Math.min(endLine, fileInfo.lineCount)}.txt`;
-                    addDownloadLink(new Blob([chunkContent], { type: 'text/plain;charset=utf-8' }), outputFilename, 'text/plain');
+                    // 텍스트 내용 추출
+                    let splitContent = '';
+                    for (let l = startLine; l <= endLine; l++) {
+                        if (l > startLine) splitContent += '\n';
+                        splitContent += fileInfo.lines[l - 1];
+                    }
+                    
+                    // 파일 생성
+                    const outputFilename = `${fileBase}_part${i+1}_lines${startLine}-${endLine}.txt`;
+                    const blob = new Blob([splitContent], { type: 'text/plain;charset=utf-8' });
+                    addDownloadLink(blob, outputFilename, 'text/plain');
                 }
                 
                 showStatus(`텍스트 분할 완료! (총 ${totalChunks}개 파일)`, 'success');
+                
             } catch (error) {
                 throw new Error(`텍스트 청크 분할 중 오류: ${error.message}`);
             }
         }
-
-        // ODT 분할을 위한 헬퍼: 새 ODT 파일 생성
-        async function createNewOdt(baseZip, contentXml, filename) {
-            const newZip = new JSZip();
-            const serializer = new XMLSerializer();
-
-            // 원본 zip에서 content.xml을 제외한 모든 파일 복사
-            for (const path in baseZip.files) {
-                if (path !== "content.xml") {
-                    const file = baseZip.files[path];
-                    newZip.file(path, await file.async("uint8array"));
-                }
-            }
-
-            // 새로운 content.xml 추가
-            const newContentStr = serializer.serializeToString(contentXml);
-            newZip.file("content.xml", newContentStr);
-
-            // ODT 파일 생성 및 다운로드 링크 추가
-            const odtBytes = await newZip.generateAsync({ type: "uint8array", mimeType: "application/vnd.oasis.opendocument.text" });
-            addDownloadLink(odtBytes, filename, 'application/vnd.oasis.opendocument.text');
-        }
-
-        // ODT 분할을 위한 헬퍼: 내용이 비워진 기본 XML 문서 생성
-        async function createBaseOdtXml(baseContentXml) {
-            const newXml = baseContentXml.cloneNode(true);
-            const textNode = newXml.querySelector("office|text, text");
-            while (textNode.firstChild) {
-                textNode.removeChild(textNode.firstChild);
-            }
-            return newXml;
-        }
-
-        // ODT 범위 분할
-        async function splitODTByRange(fileInfo, range) {
-            const ranges = parseRange(range, fileInfo.paragraphCount);
-            if (ranges.length === 0) {
-                throw new Error(`유효한 문단이 없습니다. (전체 ${fileInfo.paragraphCount} 문단)`);
-            }
-
-            try {
-                const parser = new DOMParser();
-                const contentStr = await fileInfo.zip.file("content.xml").async("string");
-                const contentXml = parser.parseFromString(contentStr, "application/xml");
-                const paragraphs = Array.from(contentXml.querySelectorAll("office|text > *, text > *"));
-
-                const newOdtXml = await createBaseOdtXml(contentXml);
-                const newTextNode = newOdtXml.querySelector("office|text, text");
-
-                ranges.forEach(paraNum => {
-                    if (paraNum > 0 && paraNum <= paragraphs.length) {
-                        newTextNode.appendChild(paragraphs[paraNum - 1].cloneNode(true));
-                    }
-                });
-
-                if (newTextNode.children.length === 0) {
-                    throw new Error('선택한 범위에 유효한 문단이 없습니다.');
-                }
-
-                const rangeStr = range.replace(/\s/g, '').replace(/,/g, '_');
-                const outputFilename = fileInfo.name.replace('.odt', `_paras_${rangeStr}.odt`);
-                await createNewOdt(fileInfo.zip, newOdtXml, outputFilename);
-                showStatus(`ODT 분할 완료! (${newTextNode.children.length} 문단)`, 'success');
-
-            } catch (error) {
-                throw new Error(`ODT 범위 분할 중 오류: ${error.message}`);
-            }
-        }
-
-        // ODT 청크 분할
-        async function splitODTByChunks(fileInfo, chunkSize) {
-            try {
-                if (fileInfo.paragraphCount === 0) {
-                    throw new Error('문단이 없는 ODT 파일입니다.');
-                }
-
-                const parser = new DOMParser();
-                const contentStr = await fileInfo.zip.file("content.xml").async("string");
-                const contentXml = parser.parseFromString(contentStr, "application/xml");
-                const paragraphs = Array.from(contentXml.querySelectorAll("office|text > *, text > *"));
-
-                const totalChunks = Math.ceil(paragraphs.length / chunkSize);
-                const fileBase = fileInfo.name.replace('.odt', '');
-
-                for (let i = 0; i < totalChunks; i++) {
-                    const startPara = i * chunkSize;
-                    const endPara = startPara + chunkSize;
-                    const chunkParas = paragraphs.slice(startPara, endPara);
-
-                    const newOdtXml = await createBaseOdtXml(contentXml);
-                    const newTextNode = newOdtXml.querySelector("office|text, text");
-                    chunkParas.forEach(p => newTextNode.appendChild(p.cloneNode(true)));
-
-                    const outputFilename = `${fileBase}_part${i+1}_${startPara + 1}-${Math.min(endPara, paragraphs.length)}.odt`;
-                    await createNewOdt(fileInfo.zip, newOdtXml, outputFilename);
-                }
-
-                showStatus(`ODT 분할 완료! (총 ${totalChunks}개 파일)`, 'success');
-
-            } catch (error) {
-                throw new Error(`ODT 청크 분할 중 오류: ${error.message}`);
-            }
-        }
         
-        // 범위 문자열 파싱 (예: "1-3, 5, 7-10")
+        // 범위 파싱
         function parseRange(rangeString, maxValue) {
             const ranges = [];
             const parts = rangeString.split(',');
