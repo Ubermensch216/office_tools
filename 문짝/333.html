@@ -1,0 +1,2539 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>문짝 - 문서 병합/분할 도구</title>
+    
+    <!-- 외부 라이브러리 CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8f9fa;
+            color: #212529;
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 1.5rem 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            letter-spacing: -0.5px;
+            cursor: pointer;
+        }
+        
+        .subtitle {
+            font-size: 1rem;
+            opacity: 0.9;
+            font-weight: 300;
+        }
+        
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+            width: 100%;
+        }
+        
+        /* 진행 단계 표시 */
+        .progress-bar {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            position: relative;
+            padding: 0 50px;
+        }
+        
+        .progress-bar::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 100px;
+            right: 100px;
+            height: 2px;
+            background-color: #e9ecef;
+            z-index: 0;
+        }
+        
+        .progress-step {
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .progress-number {
+            width: 40px;
+            height: 40px;
+            background-color: #e9ecef;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            font-weight: 600;
+            color: #6c757d;
+            transition: all 0.3s ease;
+        }
+        
+        .progress-step.active .progress-number {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .progress-step.completed .progress-number {
+            background-color: #27ae60;
+            color: white;
+        }
+        
+        .progress-label {
+            font-size: 0.875rem;
+            color: #6c757d;
+            font-weight: 500;
+        }
+        
+        /* 메인 워크플로우 컨테이너 */
+        .workflow-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+            overflow: hidden;
+            flex: 1;
+            display: flex;
+        }
+        
+        /* 3개의 메인 섹션 */
+        .workflow-section {
+            flex: 1;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        .workflow-section:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 30px;
+            bottom: 30px;
+            width: 1px;
+            background-color: #e9ecef;
+        }
+        
+        .section-header {
+            margin-bottom: 25px;
+        }
+        
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        
+        .section-subtitle {
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+        
+        /* 파일 선택 섹션 */
+        .drop-zone {
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background-color: #fafbfc;
+            margin-bottom: 20px;
+        }
+        
+        .drop-zone:hover {
+            border-color: #3498db;
+            background-color: #f0f8ff;
+        }
+        
+        .drop-zone.drag-over {
+            border-color: #3498db;
+            background-color: #e3f2fd;
+            transform: scale(1.02);
+        }
+        
+        .drop-zone-icon {
+            font-size: 3rem;
+            color: #adb5bd;
+            margin-bottom: 15px;
+        }
+        
+        .drop-zone-text {
+            font-size: 1rem;
+            color: #495057;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        .drop-zone-hint {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-bottom: 15px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .browse-btn {
+            display: inline-block;
+            padding: 10px 24px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            text-decoration: none;
+            border: none;
+            font-size: 0.9rem;
+        }
+        
+        .browse-btn:hover {
+            background-color: #2980b9;
+            transform: translateY(-1px);
+        }
+        
+        /* 파일 목록 */
+        .file-list {
+            flex: 1;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        
+        .file-order-hint {
+            font-size: 0.75rem;
+            color: #6c757d;
+            text-align: center;
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .file-order-hint.visible {
+            display: block;
+        }
+        
+        .file-item {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 12px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            transition: all 0.2s ease;
+            cursor: move;
+            position: relative;
+        }
+        
+        .file-item:hover {
+            border-color: #3498db;
+            background-color: #f0f8ff;
+        }
+        
+        .file-item.error {
+            border-color: #e74c3c;
+            background-color: #fee;
+            cursor: not-allowed;
+        }
+        
+        .file-item.dragging {
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+        
+        .file-item.drag-over {
+            border-top: 3px solid #3498db;
+            padding-top: 9px;
+        }
+        
+        .drag-handle {
+            position: absolute;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.2rem;
+            color: #adb5bd;
+            cursor: move;
+        }
+        
+        .file-item.error .drag-handle {
+            display: none;
+        }
+        
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            margin-left: 30px;
+        }
+        
+        .file-order {
+            background-color: #3498db;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        
+        .file-icon {
+            font-size: 1.5rem;
+        }
+        
+        .file-details {
+            flex: 1;
+        }
+        
+        .file-name {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #212529;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .file-meta {
+            font-size: 0.75rem;
+            color: #6c757d;
+        }
+        
+        .file-meta.error {
+            color: #e74c3c;
+        }
+        
+        .remove-btn {
+            background-color: transparent;
+            color: #6c757d;
+            border: none;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: color 0.2s ease;
+            line-height: 1;
+        }
+        
+        .remove-btn:hover {
+            color: #e74c3c;
+        }
+        
+        .clear-all-btn {
+            display: block;
+            width: 100%;
+            padding: 8px;
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            margin-top: 10px;
+            transition: background-color 0.3s ease;
+        }
+        
+        .clear-all-btn:hover {
+            background-color: #c0392b;
+        }
+        
+        /* 작업 선택 섹션 */
+        .operation-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab-btn {
+            flex: 1;
+            padding: 12px 20px;
+            border: 2px solid #e9ecef;
+            background-color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            color: #495057;
+        }
+        
+        .tab-btn:hover {
+            border-color: #3498db;
+            color: #3498db;
+        }
+        
+        .tab-btn.active {
+            background-color: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+        
+        .tab-content {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #212529;
+            font-size: 0.9rem;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+        
+        .form-hint {
+            font-size: 0.75rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        /* 분할 옵션 */
+        .split-options {
+            margin-top: 15px;
+        }
+        
+        .split-option {
+            display: flex;
+            align-items: flex-start;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 8px;
+        }
+        
+        .split-option:hover {
+            border-color: #3498db;
+            background-color: #f0f8ff;
+        }
+        
+        .split-option input[type="radio"] {
+            margin-right: 10px;
+            margin-top: 2px;
+        }
+        
+        .split-label {
+            flex: 1;
+        }
+        
+        .split-title {
+            font-weight: 500;
+            color: #212529;
+            margin-bottom: 2px;
+            font-size: 0.9rem;
+        }
+        
+        .split-description {
+            font-size: 0.75rem;
+            color: #6c757d;
+        }
+        
+        .split-input-container {
+            margin-top: 10px;
+            padding-left: 25px;
+            display: none;
+        }
+        
+        .split-input-container.visible {
+            display: block;
+        }
+        
+        /* Excel 옵션 */
+        .excel-options {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .excel-options.visible {
+            display: block;
+        }
+        
+        .excel-options-title {
+            font-weight: 600;
+            color: #212529;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+        
+        .radio-option {
+            display: flex;
+            align-items: flex-start;
+            padding: 10px;
+            background-color: white;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 8px;
+        }
+        
+        .radio-option:hover {
+            border-color: #3498db;
+        }
+        
+        .radio-option input[type="radio"] {
+            margin-right: 10px;
+            margin-top: 2px;
+        }
+        
+        .radio-label {
+            flex: 1;
+        }
+        
+        .radio-title {
+            font-weight: 500;
+            color: #212529;
+            margin-bottom: 2px;
+            font-size: 0.9rem;
+        }
+        
+        .radio-description {
+            font-size: 0.75rem;
+            color: #6c757d;
+        }
+        
+        /* 다운로드 섹션 */
+        .result-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .result-icon {
+            font-size: 4rem;
+            color: #e9ecef;
+            margin-bottom: 20px;
+        }
+        
+        .result-icon.ready {
+            color: #27ae60;
+        }
+        
+        .execute-btn {
+            padding: 14px 40px;
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+        
+        .execute-btn:hover:not(:disabled) {
+            background-color: #229954;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3);
+        }
+        
+        .execute-btn:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        
+        .download-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 300px;
+        }
+        
+        .download-btn {
+            padding: 14px 20px;
+            background-color: #f39c12;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            display: none;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .download-btn:hover {
+            background-color: #e67e22;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(243, 156, 18, 0.3);
+        }
+        
+        /* 상태 메시지 */
+        .status-message {
+            margin-top: 20px;
+            padding: 12px 20px;
+            border-radius: 6px;
+            display: none;
+            font-size: 0.9rem;
+            max-width: 300px;
+            text-align: left;
+        }
+        
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status-message.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .error-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        
+        .error-detail {
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        footer {
+            background-color: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 20px 0;
+            margin-top: auto;
+        }
+        
+        footer p {
+            margin: 0;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        /* 반응형 디자인 */
+        @media (max-width: 1024px) {
+            .workflow-container {
+                flex-direction: column;
+            }
+            
+            .workflow-section:not(:last-child)::after {
+                display: none;
+            }
+            
+            .workflow-section {
+                border-bottom: 1px solid #e9ecef;
+            }
+            
+            .workflow-section:last-child {
+                border-bottom: none;
+            }
+            
+            .progress-bar {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <h1 id="title">문짝</h1>
+            <p class="subtitle">문서를 짝 맞춰주는 프로그램 - 문서 병합/분할 도구</p>
+        </div>
+    </header>
+    
+    <main class="main-container">
+        <!-- 진행 단계 표시 -->
+        <div class="progress-bar">
+            <div class="progress-step active" id="step-1">
+                <div class="progress-number">1</div>
+                <div class="progress-label">파일 선택</div>
+            </div>
+            <div class="progress-step" id="step-2">
+                <div class="progress-number">2</div>
+                <div class="progress-label">작업 선택</div>
+            </div>
+            <div class="progress-step" id="step-3">
+                <div class="progress-number">3</div>
+                <div class="progress-label">다운로드</div>
+            </div>
+        </div>
+        
+        <!-- 메인 워크플로우 -->
+        <div class="workflow-container">
+            <!-- 1. 파일 선택 섹션 -->
+            <div class="workflow-section">
+                <div class="section-header">
+                    <h2 class="section-title">파일 선택</h2>
+                    <p class="section-subtitle">처리할 파일을 추가하세요</p>
+                </div>
+                
+                <div class="drop-zone" id="drop-zone">
+                    <div class="drop-zone-icon">📁</div>
+                    <div class="drop-zone-text">파일을 드래그하세요</div>
+                    <div class="drop-zone-hint">PDF, XLSX, TXT, ODT 지원</div>
+                    <label for="file-input" class="browse-btn">
+                        파일 선택
+                    </label>
+                    <input type="file" id="file-input" class="file-input" multiple accept=".pdf,.xlsx,.txt,.odt">
+                </div>
+                
+                <div id="file-order-hint" class="file-order-hint">
+                    🔄 파일을 드래그하여 순서를 변경할 수 있습니다
+                </div>
+                
+                <div id="file-list" class="file-list"></div>
+                
+                <button class="clear-all-btn" onclick="clearAllFiles()" style="display: none;" id="clear-btn">
+                    모든 파일 제거
+                </button>
+            </div>
+            
+            <!-- 2. 작업 선택 섹션 -->
+            <div class="workflow-section">
+                <div class="section-header">
+                    <h2 class="section-title">작업 선택</h2>
+                    <p class="section-subtitle">원하는 작업을 설정하세요</p>
+                </div>
+                
+                <div class="operation-tabs">
+                    <button class="tab-btn active" onclick="switchTab('merge')">병합</button>
+                    <button class="tab-btn" onclick="switchTab('split')">분할</button>
+                </div>
+                
+                <div id="merge-tab" class="tab-content active">
+                    <div class="form-group">
+                        <label class="form-label">출력 파일명 (선택사항)</label>
+                        <input type="text" id="merge-filename" class="form-input" placeholder="자동 생성됨">
+                        <p class="form-hint">비워두면 자동으로 파일명이 생성됩니다</p>
+                    </div>
+                    
+                    <div id="excel-merge-options" class="excel-options">
+                        <h4 class="excel-options-title">Excel 병합 옵션</h4>
+                        <label class="radio-option">
+                            <input type="radio" name="excel-merge-type" value="separate" checked>
+                            <div class="radio-label">
+                                <div class="radio-title">시트 분리</div>
+                                <div class="radio-description">각 파일의 시트를 별도로 유지</div>
+                            </div>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="excel-merge-type" value="combine">
+                            <div class="radio-label">
+                                <div class="radio-title">시트 통합</div>
+                                <div class="radio-description">모든 데이터를 하나의 시트로 통합</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="split-tab" class="tab-content">
+                    <div id="pdf-split-options" class="split-options">
+                        <label class="split-option">
+                            <input type="radio" name="split-type" value="range" checked onclick="toggleSplitOption('range')">
+                            <div class="split-label">
+                                <div class="split-title">특정 범위 분할</div>
+                                <div class="split-description">지정한 페이지 범위만 추출</div>
+                            </div>
+                        </label>
+                        
+                        <div id="range-input-container" class="split-input-container visible">
+                            <div class="form-group">
+                                <label class="form-label">분할 범위</label>
+                                <input type="text" id="split-range" class="form-input" placeholder="예: 1-3, 5, 7-10">
+                                <p class="form-hint">페이지 번호를 입력하세요</p>
+                            </div>
+                        </div>
+                        
+                        <label class="split-option">
+                            <input type="radio" name="split-type" value="chunk" onclick="toggleSplitOption('chunk')">
+                            <div class="split-label">
+                                <div class="split-title">페이지 단위 분할</div>
+                                <div class="split-description">지정한 페이지 수마다 파일 분할</div>
+                            </div>
+                        </label>
+                        
+                        <div id="chunk-input-container" class="split-input-container">
+                            <div class="form-group">
+                                <label class="form-label">분할 페이지 분량</label>
+                                <input type="number" id="split-chunk-size" class="form-input" placeholder="예: 3" min="1" value="3">
+                                <p class="form-hint">각 파일당 페이지 수를 입력하세요</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="excel-split-options" class="split-options" style="display: none;">
+                        <label class="split-option">
+                            <input type="radio" name="excel-split-type" value="sheet" checked onclick="toggleExcelSplitOption('sheet')">
+                            <div class="split-label">
+                                <div class="split-title">Sheet 단위 분할</div>
+                                <div class="split-description">각 시트를 개별 파일로 분할</div>
+                            </div>
+                        </label>
+                        
+                        <label class="split-option">
+                            <input type="radio" name="excel-split-type" value="row" onclick="toggleExcelSplitOption('row')">
+                            <div class="split-label">
+                                <div class="split-title">행 단위 분할</div>
+                                <div class="split-description">첫 번째 시트를 지정한 행 수로 분할</div>
+                            </div>
+                        </label>
+                        
+                        <div id="row-input-container" class="split-input-container">
+                            <div class="form-group">
+                                <label class="form-label">분할 행 분량</label>
+                                <input type="number" id="split-row-size" class="form-input" placeholder="예: 50" min="1" value="50">
+                                <p class="form-hint">각 파일당 행 수를 입력하세요</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="txt-split-options" class="split-options" style="display: none;">
+                        <label class="split-option">
+                            <input type="radio" name="txt-split-type" value="range" checked onclick="toggleTxtSplitOption('range')">
+                            <div class="split-label">
+                                <div class="split-title">특정 범위 분할</div>
+                                <div class="split-description">지정한 라인 범위만 추출</div>
+                            </div>
+                        </label>
+                        
+                        <div id="txt-range-input-container" class="split-input-container visible">
+                            <div class="form-group">
+                                <label class="form-label">분할 범위</label>
+                                <input type="text" id="txt-split-range" class="form-input" placeholder="예: 1-3, 5, 7-10">
+                                <p class="form-hint">라인 번호를 입력하세요</p>
+                            </div>
+                        </div>
+                        
+                        <label class="split-option">
+                            <input type="radio" name="txt-split-type" value="chunk" onclick="toggleTxtSplitOption('chunk')">
+                            <div class="split-label">
+                                <div class="split-title">라인 단위 분할</div>
+                                <div class="split-description">지정한 라인 수마다 파일 분할</div>
+                            </div>
+                        </label>
+                        
+                        <div id="txt-chunk-input-container" class="split-input-container">
+                            <div class="form-group">
+                                <label class="form-label">분할 라인 분량</label>
+                                <input type="number" id="txt-split-chunk-size" class="form-input" placeholder="예: 100" min="1" value="100">
+                                <p class="form-hint">각 파일당 라인 수를 입력하세요</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="odt-split-options" class="split-options" style="display: none;">
+                        <label class="split-option">
+                            <input type="radio" name="odt-split-type" value="range" checked onclick="toggleOdtSplitOption('range')">
+                            <div class="split-label">
+                                <div class="split-title">특정 문단 범위 분할</div>
+                                <div class="split-description">지정한 문단 범위만 추출</div>
+                            </div>
+                        </label>
+                        
+                        <div id="odt-range-input-container" class="split-input-container visible">
+                            <div class="form-group">
+                                <label class="form-label">분할 범위</label>
+                                <input type="text" id="odt-split-range" class="form-input" placeholder="예: 1-10, 15, 20-25">
+                                <p class="form-hint">문단 번호를 입력하세요</p>
+                            </div>
+                        </div>
+                        
+                        <label class="split-option">
+                            <input type="radio" name="odt-split-type" value="chunk" onclick="toggleOdtSplitOption('chunk')">
+                            <div class="split-label">
+                                <div class="split-title">문단 단위 분할</div>
+                                <div class="split-description">지정한 문단 수마다 파일 분할</div>
+                            </div>
+                        </label>
+                        
+                        <div id="odt-chunk-input-container" class="split-input-container">
+                            <div class="form-group">
+                                <label class="form-label">분할 문단 분량</label>
+                                <input type="number" id="odt-split-chunk-size" class="form-input" placeholder="예: 50" min="1" value="50">
+                                <p class="form-hint">각 파일당 문단 수를 입력하세요</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 3. 다운로드 섹션 -->
+            <div class="workflow-section">
+                <div class="section-header">
+                    <h2 class="section-title">실행 및 다운로드</h2>
+                    <p class="section-subtitle">작업을 실행하고 결과를 받으세요</p>
+                </div>
+                
+                <div class="result-section">
+                    <div class="result-icon" id="result-icon">⬇️</div>
+                    
+                    <button class="execute-btn" onclick="executeOperation()" disabled id="execute-btn">
+                        실행하기
+                    </button>
+                    
+                    <div class="download-container" id="download-container"></div>
+                    
+                    <div id="status-message" class="status-message"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <footer>
+        <p>ⓒ 사하구 기획실 업무혁신계 All Rights Reserved.</p>
+    </footer>
+    
+    <script>
+        // 전역 변수
+        let selectedFiles = [];
+        let currentOperation = 'merge';
+        let currentSplitType = 'range';
+        let currentExcelSplitType = 'sheet';
+        let currentTxtSplitType = 'range';
+        let currentOdtSplitType = 'range';
+        let draggedItem = null;
+        let draggedIndex = null;
+        let generatedFiles = [];
+        
+        // DOM 요소
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const executeBtn = document.getElementById('execute-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const titleElement = document.getElementById('title');
+        
+        // 타이틀 클릭 시 새로고침
+        titleElement.addEventListener('click', function() {
+            window.location.reload();
+        });
+        
+        // 분할 옵션 전환 (PDF용)
+        function toggleSplitOption(type) {
+            currentSplitType = type;
+            
+            document.getElementById('range-input-container').classList.toggle('visible', type === 'range');
+            document.getElementById('chunk-input-container').classList.toggle('visible', type === 'chunk');
+        }
+        
+        // 분할 옵션 전환 (Excel용)
+        function toggleExcelSplitOption(type) {
+            currentExcelSplitType = type;
+            
+            document.getElementById('row-input-container').classList.toggle('visible', type === 'row');
+        }
+        
+        // 분할 옵션 전환 (TXT용)
+        function toggleTxtSplitOption(type) {
+            currentTxtSplitType = type;
+            
+            document.getElementById('txt-range-input-container').classList.toggle('visible', type === 'range');
+            document.getElementById('txt-chunk-input-container').classList.toggle('visible', type === 'chunk');
+        }
+
+        // 분할 옵션 전환 (ODT용)
+        function toggleOdtSplitOption(type) {
+            currentOdtSplitType = type;
+            
+            document.getElementById('odt-range-input-container').classList.toggle('visible', type === 'range');
+            document.getElementById('odt-chunk-input-container').classList.toggle('visible', type === 'chunk');
+        }
+        
+        // 파일 유형에 따라 분할 옵션 표시 변경
+        function updateSplitOptions() {
+            const validFiles = selectedFiles.filter(f => !f.hasError);
+            
+            document.getElementById('pdf-split-options').style.display = 'none';
+            document.getElementById('excel-split-options').style.display = 'none';
+            document.getElementById('txt-split-options').style.display = 'none';
+            document.getElementById('odt-split-options').style.display = 'none';
+
+            if (validFiles.length === 1) {
+                const fileType = validFiles[0].type;
+                
+                if (fileType === 'pdf') document.getElementById('pdf-split-options').style.display = 'block';
+                if (fileType === 'xlsx') {
+                    document.getElementById('excel-split-options').style.display = 'block';
+                    toggleExcelSplitOption('sheet');
+                    document.querySelector('input[name="excel-split-type"][value="sheet"]').checked = true;
+                }
+                if (fileType === 'txt') document.getElementById('txt-split-options').style.display = 'block';
+                if (fileType === 'odt') document.getElementById('odt-split-options').style.display = 'block';
+
+            } else {
+                document.getElementById('pdf-split-options').style.display = 'block';
+            }
+        }
+        
+        // 드래그 앤 드롭 이벤트 리스너
+        dropZone.addEventListener('click', (e) => {
+            if (e.target === dropZone || e.target.parentElement === dropZone) {
+                fileInput.click();
+            }
+        });
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('drag-over');
+        });
+        
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('drag-over');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('drag-over');
+            
+            const files = Array.from(e.dataTransfer.files);
+            handleFiles(files);
+        });
+        
+        // 파일 입력 이벤트 리스너
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            handleFiles(files);
+            e.target.value = ''; // 같은 파일 재선택 가능하도록
+        });
+        
+        // 자동 파일명 생성
+        function generateAutoFilename(validFiles, fileType) {
+            const now = new Date();
+            const dateStr = now.getFullYear() + 
+                           String(now.getMonth() + 1).padStart(2, '0') + 
+                           String(now.getDate()).padStart(2, '0') + '_' +
+                           String(now.getHours()).padStart(2, '0') + 
+                           String(now.getMinutes()).padStart(2, '0');
+            
+            // 파일이 하나인 경우
+            if (validFiles.length === 1) {
+                const baseName = validFiles[0].name.replace(/\.[^/.]+$/, '');
+                return `${baseName}_병합_${dateStr}`;
+            }
+            
+            // 여러 파일인 경우
+            const typeMap = {
+                'pdf': 'PDF',
+                'xlsx': 'Excel',
+                'txt': '텍스트',
+                'odt': 'ODT'
+            };
+            
+            const fileTypeKor = typeMap[fileType] || '문서';
+            return `${fileTypeKor}_병합_${validFiles.length}개_${dateStr}`;
+        }
+        
+        // 파일 처리
+        function handleFiles(files) {
+            const validFiles = files.filter(file => {
+                const extension = file.name.split('.').pop().toLowerCase();
+                return ['pdf', 'xlsx', 'txt', 'odt'].includes(extension);
+            });
+            
+            if (validFiles.length !== files.length) {
+                const invalidCount = files.length - validFiles.length;
+                showError('파일 형식 오류', `${invalidCount}개 파일이 지원하지 않는 형식입니다.`, 'PDF, XLSX, TXT, ODT 파일만 업로드 가능합니다.');
+            }
+            
+            validFiles.forEach(file => {
+                // 파일 크기 체크 (100MB 제한)
+                if (file.size > 100 * 1024 * 1024) {
+                    showError('파일 크기 초과', `${file.name}`, '파일 크기는 100MB를 초과할 수 없습니다.');
+                    return;
+                }
+                
+                const fileInfo = {
+                    file: file,
+                    name: file.name,
+                    size: formatFileSize(file.size),
+                    type: getFileType(file.name),
+                    hasError: false
+                };
+                
+                selectedFiles.push(fileInfo);
+                analyzeFile(fileInfo);
+            });
+            
+            updateFileList();
+            checkExcelOptions();
+            updateSplitOptions();
+            updateUI();
+        }
+        
+        // 오류 메시지 표시
+        function showError(title, detail = '', hint = '') {
+            const statusElement = document.getElementById('status-message');
+            let errorHTML = `<div class="error-title">❌ ${title}</div>`;
+            if (detail) errorHTML += `<div class="error-detail">${detail}</div>`;
+            if (hint) errorHTML += `<div class="error-detail">💡 ${hint}</div>`;
+            
+            statusElement.className = 'status-message error';
+            statusElement.innerHTML = errorHTML;
+            statusElement.style.display = 'block';
+            
+            setTimeout(() => {
+                statusElement.style.display = 'none';
+            }, 7000);
+        }
+        
+        // UI 상태 업데이트
+        function updateUI() {
+            // 실행 버튼 상태
+            const hasValidFiles = selectedFiles.some(f => !f.hasError);
+            executeBtn.disabled = !hasValidFiles;
+            
+            // Clear 버튼 표시/숨김
+            clearBtn.style.display = selectedFiles.length > 0 ? 'block' : 'none';
+            
+            // 파일 순서 힌트 표시
+            const orderHint = document.getElementById('file-order-hint');
+            const validMergeFiles = selectedFiles.filter(f => !f.hasError);
+            if (currentOperation === 'merge' && validMergeFiles.length > 1) {
+                orderHint.classList.add('visible');
+            } else {
+                orderHint.classList.remove('visible');
+            }
+            
+            // 진행 단계 업데이트
+            updateProgressSteps();
+        }
+        
+        // 진행 단계 업데이트
+        function updateProgressSteps() {
+            const step1 = document.getElementById('step-1');
+            const step2 = document.getElementById('step-2');
+            
+            if (selectedFiles.length > 0 && selectedFiles.some(f => !f.hasError)) {
+                step1.classList.add('completed');
+                step2.classList.add('active');
+            } else {
+                step1.classList.remove('completed');
+                step2.classList.remove('active');
+            }
+        }
+        
+        // 파일 타입에 맞는 아이콘 반환
+        function getFileIcon(type) {
+            switch(type) {
+                case 'pdf': return '📄';
+                case 'xlsx': return '📊';
+                case 'txt': return '📝';
+                case 'odt': return '📄';
+                default: return '📎';
+            }
+        }
+        
+        // Excel 옵션 표시/숨김 체크
+        function checkExcelOptions() {
+            const excelOptions = document.getElementById('excel-merge-options');
+            const validFiles = selectedFiles.filter(f => !f.hasError);
+            const hasExcelFiles = validFiles.some(f => f.type === 'xlsx');
+            const allExcelFiles = validFiles.length > 0 && validFiles.every(f => f.type === 'xlsx');
+            
+            if (currentOperation === 'merge' && hasExcelFiles && allExcelFiles) {
+                excelOptions.classList.add('visible');
+            } else {
+                excelOptions.classList.remove('visible');
+            }
+        }
+        
+        // 파일 크기 포맷팅
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // 파일 타입 확인
+        function getFileType(filename) {
+            const extension = filename.split('.').pop().toLowerCase();
+            return extension;
+        }
+        
+        // 파일 분석
+        async function analyzeFile(fileInfo) {
+            const reader = new FileReader();
+            
+            reader.onload = async function(e) {
+                try {
+                    const content = e.target.result;
+                    
+                    switch(fileInfo.type) {
+                        case 'pdf':
+                            await analyzePDF(fileInfo, content);
+                            break;
+                        case 'xlsx':
+                            analyzeXLSX(fileInfo, content);
+                            break;
+                        case 'txt':
+                            analyzeTXT(fileInfo, content);
+                            break;
+                        case 'odt':
+                            await analyzeODT(fileInfo, content);
+                            break;
+                    }
+                    
+                    updateFileList();
+                    updateSplitOptions();
+                } catch (error) {
+                    fileInfo.hasError = true;
+                    fileInfo.details = '읽기 실패';
+                    updateFileList();
+                    showError('파일 읽기 오류', fileInfo.name, '파일이 손상되었거나 암호화되어 있을 수 있습니다.');
+                }
+            };
+            
+            reader.onerror = function() {
+                fileInfo.hasError = true;
+                fileInfo.details = '읽기 실패';
+                updateFileList();
+                showError('파일 로드 실패', fileInfo.name, '파일을 읽을 수 없습니다.');
+            };
+            
+            if (fileInfo.type === 'txt') {
+                reader.readAsText(fileInfo.file);
+            } else {
+                reader.readAsArrayBuffer(fileInfo.file);
+            }
+        }
+        
+        // PDF 분석
+        async function analyzePDF(fileInfo, content) {
+            try {
+                const pdfDoc = await PDFLib.PDFDocument.load(content);
+                fileInfo.pageCount = pdfDoc.getPageCount();
+                fileInfo.details = `${fileInfo.pageCount} 페이지`;
+                fileInfo.pdfDoc = pdfDoc;
+                
+                if (fileInfo.pageCount === 0) {
+                    fileInfo.hasError = true;
+                    fileInfo.details = '빈 PDF';
+                    showError('빈 PDF 파일', fileInfo.name, '페이지가 없는 PDF 파일입니다.');
+                }
+            } catch (error) {
+                console.error('PDF 분석 오류:', error);
+                fileInfo.hasError = true;
+                fileInfo.details = '분석 실패';
+                
+                if (error.message.includes('encrypted')) {
+                    showError('암호화된 PDF', fileInfo.name, '암호로 보호된 PDF는 처리할 수 없습니다.');
+                } else {
+                    showError('PDF 분석 실패', fileInfo.name, '유효한 PDF 파일이 아니거나 손상되었습니다.');
+                }
+            }
+        }
+        
+        // XLSX 분석
+        function analyzeXLSX(fileInfo, content) {
+            try {
+                const workbook = XLSX.read(content, { type: 'array' });
+                fileInfo.sheetNames = workbook.SheetNames;
+                fileInfo.sheetCount = workbook.SheetNames.length;
+                fileInfo.details = `${fileInfo.sheetCount} 시트`;
+                fileInfo.workbook = workbook;
+                
+                // 행 개수 분석 (첫번째 시트)
+                if (fileInfo.sheetCount > 0) {
+                    const firstSheetName = workbook.SheetNames[0];
+                    const firstSheet = workbook.Sheets[firstSheetName];
+                    const data = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                    fileInfo.rowCount = data.length;
+                    fileInfo.details = `${fileInfo.sheetCount} 시트 (첫번째 시트: ${fileInfo.rowCount}행)`;
+                }
+                
+                if (fileInfo.sheetCount === 0) {
+                    fileInfo.hasError = true;
+                    fileInfo.details = '빈 Excel';
+                    showError('빈 Excel 파일', fileInfo.name, '시트가 없는 Excel 파일입니다.');
+                }
+            } catch (error) {
+                console.error('XLSX 분석 오류:', error);
+                fileInfo.hasError = true;
+                fileInfo.details = '분석 실패';
+                
+                if (error.message.includes('password')) {
+                    showError('암호화된 Excel', fileInfo.name, '암호로 보호된 Excel 파일은 처리할 수 없습니다.');
+                } else {
+                    showError('Excel 분석 실패', fileInfo.name, '유효한 Excel 파일이 아니거나 손상되었습니다.');
+                }
+            }
+        }
+        
+        // TXT 분석
+        function analyzeTXT(fileInfo, content) {
+            try {
+                const lines = content.split('\n');
+                fileInfo.lineCount = lines.length;
+                fileInfo.details = `${fileInfo.lineCount} 라인`;
+                fileInfo.content = content;
+                fileInfo.lines = lines;
+                
+                // 빈 파일 체크
+                if (content.trim().length === 0) {
+                    fileInfo.hasError = true;
+                    fileInfo.details = '빈 파일';
+                    showError('빈 텍스트 파일', fileInfo.name, '내용이 없는 텍스트 파일입니다.');
+                }
+            } catch (error) {
+                console.error('TXT 분석 오류:', error);
+                fileInfo.hasError = true;
+                fileInfo.details = '분석 실패';
+                showError('텍스트 분석 실패', fileInfo.name, '인코딩 문제가 있을 수 있습니다.');
+            }
+        }
+
+        // ODT 분석
+        async function analyzeODT(fileInfo, content) {
+            try {
+                const zip = await JSZip.loadAsync(content);
+                fileInfo.zip = zip; // Store the zip object
+
+                const contentXmlStr = await zip.file("content.xml").async("string");
+                const parser = new DOMParser();
+                const contentXml = parser.parseFromString(contentXmlStr, "application/xml");
+
+                const paragraphs = contentXml.getElementsByTagName("text:p");
+                fileInfo.paragraphCount = paragraphs.length;
+                fileInfo.details = `${fileInfo.paragraphCount} 문단`;
+
+                if (fileInfo.paragraphCount === 0) {
+                    fileInfo.hasError = true;
+                    fileInfo.details = '빈 ODT';
+                    showError('빈 ODT 파일', fileInfo.name, '문단이 없는 ODT 파일입니다.');
+                }
+            } catch (error) {
+                console.error('ODT 분석 오류:', error);
+                fileInfo.hasError = true;
+                fileInfo.details = '분석 실패';
+                showError('ODT 분석 실패', fileInfo.name, '유효한 ODT 파일이 아니거나 손상되었습니다.');
+            }
+        }
+        
+        // 파일 목록 업데이트
+        function updateFileList() {
+            const fileList = document.getElementById('file-list');
+            fileList.innerHTML = '';
+            
+            selectedFiles.forEach((fileInfo, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = fileInfo.hasError ? 'file-item error' : 'file-item';
+                fileItem.draggable = !fileInfo.hasError;
+                fileItem.dataset.index = index;
+                
+                // 드래그 이벤트 추가
+                if (!fileInfo.hasError) {
+                    fileItem.addEventListener('dragstart', handleDragStart);
+                    fileItem.addEventListener('dragend', handleDragEnd);
+                    fileItem.addEventListener('dragover', handleDragOver);
+                    fileItem.addEventListener('drop', handleDrop);
+                    fileItem.addEventListener('dragleave', handleDragLeave);
+                }
+                
+                const orderNumber = !fileInfo.hasError ? getValidFileOrder(index) : '';
+                
+                fileItem.innerHTML = `
+                    ${!fileInfo.hasError ? '<span class="drag-handle">≡</span>' : ''}
+                    <div class="file-info">
+                        ${orderNumber ? `<div class="file-order">${orderNumber}</div>` : ''}
+                        <div class="file-icon">${getFileIcon(fileInfo.type)}</div>
+                        <div class="file-details">
+                            <div class="file-name" title="${fileInfo.name}">${fileInfo.name}</div>
+                            <div class="file-meta ${fileInfo.hasError ? 'error' : ''}">${fileInfo.size} | ${fileInfo.details || '분석 중...'}</div>
+                        </div>
+                    </div>
+                    <button class="remove-btn" onclick="removeFile(${index})" title="제거">✕</button>
+                `;
+                fileList.appendChild(fileItem);
+            });
+            
+            updateUI();
+        }
+        
+        // 유효한 파일의 순서 번호 계산
+        function getValidFileOrder(index) {
+            if (currentOperation !== 'merge') return '';
+            
+            let order = 1;
+            for (let i = 0; i < index; i++) {
+                if (!selectedFiles[i].hasError) order++;
+            }
+            return selectedFiles[index].hasError ? '' : order;
+        }
+        
+        // 드래그 앤 드롭 핸들러
+        function handleDragStart(e) {
+            draggedItem = e.target;
+            draggedIndex = parseInt(e.target.dataset.index);
+            e.target.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', e.target.innerHTML);
+        }
+        
+        function handleDragEnd(e) {
+            e.target.classList.remove('dragging');
+            draggedItem = null;
+            draggedIndex = null;
+            
+            // 모든 drag-over 클래스 제거
+            document.querySelectorAll('.file-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+        }
+        
+        function handleDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            
+            e.dataTransfer.dropEffect = 'move';
+            
+            const target = e.target.closest('.file-item');
+            if (target && target !== draggedItem && !target.classList.contains('error')) {
+                // 모든 drag-over 클래스 제거
+                document.querySelectorAll('.file-item').forEach(item => {
+                    item.classList.remove('drag-over');
+                });
+                target.classList.add('drag-over');
+            }
+            
+            return false;
+        }
+        
+        function handleDragLeave(e) {
+            const target = e.target.closest('.file-item');
+            if (target) {
+                target.classList.remove('drag-over');
+            }
+        }
+        
+        function handleDrop(e) {
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+            
+            const target = e.target.closest('.file-item');
+            if (target && target !== draggedItem && !target.classList.contains('error')) {
+                const targetIndex = parseInt(target.dataset.index);
+                
+                // 파일 순서 변경
+                const draggedFile = selectedFiles[draggedIndex];
+                selectedFiles.splice(draggedIndex, 1);
+                
+                if (targetIndex > draggedIndex) {
+                    selectedFiles.splice(targetIndex - 1, 0, draggedFile);
+                } else {
+                    selectedFiles.splice(targetIndex, 0, draggedFile);
+                }
+                
+                updateFileList();
+            }
+            
+            return false;
+        }
+        
+        // 파일 제거
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateFileList();
+            checkExcelOptions();
+            updateSplitOptions();
+            updateUI();
+        }
+        
+        // 모든 파일 제거
+        function clearAllFiles() {
+            selectedFiles = [];
+            updateFileList();
+            checkExcelOptions();
+            updateSplitOptions();
+            updateUI();
+            
+            // 다운로드 버튼 숨기기
+            clearDownloadLinks();
+            document.getElementById('result-icon').classList.remove('ready');
+        }
+        
+        // 다운로드 링크 초기화
+        function clearDownloadLinks() {
+            const container = document.getElementById('download-container');
+            container.innerHTML = '';
+            generatedFiles = [];
+        }
+        
+        // 다운로드 링크 추가
+        function addDownloadLink(file, filename, mimeType) {
+            const container = document.getElementById('download-container');
+            const blob = file instanceof Blob ? file : new Blob([file], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            
+            // 파일 정보 저장
+            generatedFiles.push({
+                url: url,
+                filename: filename
+            });
+            
+            // 새 링크 생성
+            const link = document.createElement('a');
+            link.className = 'download-btn';
+            link.href = url;
+            link.download = filename;
+            link.textContent = filename;
+            link.style.display = 'block';
+            
+            container.appendChild(link);
+            
+            // 자동 정리
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 60000);
+        }
+        
+        // 탭 전환
+        function switchTab(operation) {
+            currentOperation = operation;
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            event.target.classList.add('active');
+            document.getElementById(`${operation}-tab`).classList.add('active');
+            
+            checkExcelOptions();
+            updateSplitOptions();
+            updateFileList(); // 순서 번호 업데이트를 위해
+            updateUI();
+        }
+        
+        // 작업 실행
+        async function executeOperation() {
+            const validFiles = selectedFiles.filter(f => !f.hasError);
+            
+            if (validFiles.length === 0) {
+                showError('유효한 파일 없음', '처리할 수 있는 파일이 없습니다.', '오류가 없는 파일을 선택해주세요.');
+                return;
+            }
+            
+            showStatus('처리 중... <span class="loading"></span>', 'info');
+            
+            // 3단계 활성화
+            document.getElementById('step-2').classList.add('completed');
+            document.getElementById('step-3').classList.add('active');
+            
+            // 이전 다운로드 링크 초기화
+            clearDownloadLinks();
+            
+            try {
+                if (currentOperation === 'merge') {
+                    await mergeFiles();
+                } else {
+                    await splitFiles();
+                }
+                
+                // 결과 아이콘 업데이트
+                document.getElementById('result-icon').classList.add('ready');
+                document.getElementById('step-3').classList.add('completed');
+                
+            } catch (error) {
+                console.error('작업 실행 오류:', error);
+                showError('작업 실행 실패', error.message || '알 수 없는 오류', '파일을 다시 확인해주세요.');
+            }
+        }
+        
+        // 파일 병합
+        async function mergeFiles() {
+            const validFiles = selectedFiles.filter(f => !f.hasError);
+            let filename = document.getElementById('merge-filename').value.trim();
+            
+            // 파일 타입 체크
+            const fileTypes = [...new Set(validFiles.map(f => f.type))];
+            
+            if (fileTypes.length > 1) {
+                showError('파일 형식 불일치', `${fileTypes.join(', ')} 형식이 혼재`, '같은 형식의 파일만 병합할 수 있습니다.');
+                return;
+            }
+            
+            const fileType = fileTypes[0];
+            
+            // 파일명이 비어있으면 자동 생성
+            if (!filename) {
+                filename = generateAutoFilename(validFiles, fileType);
+            }
+            
+            // 파일명 유효성 검사
+            const invalidChars = /[<>:"/\\|?*]/;
+            if (invalidChars.test(filename)) {
+                showError('잘못된 파일명', filename, '파일명에 특수문자(< > : " / \\ | ? *)를 사용할 수 없습니다.');
+                return;
+            }
+            
+            try {
+                switch(fileType) {
+                    case 'pdf':
+                        await mergePDFs(validFiles, filename);
+                        break;
+                    case 'xlsx':
+                        const mergeType = document.querySelector('input[name="excel-merge-type"]:checked').value;
+                        await mergeXLSX(validFiles, filename, mergeType);
+                        break;
+                    case 'txt':
+                        mergeTXTs(validFiles, filename);
+                        break;
+                    case 'odt':
+                        await mergeODTs(validFiles, filename);
+                        break;
+                    default:
+                        showError('지원하지 않는 형식', fileType, 'PDF, XLSX, TXT, ODT 파일만 지원합니다.');
+                }
+            } catch (error) {
+                console.error('병합 오류:', error);
+                showError('병합 실패', error.message, '파일을 다시 확인하고 시도해주세요.');
+            }
+        }
+        
+        // PDF 병합
+        async function mergePDFs(pdfFiles, filename) {
+            try {
+                const mergedPdf = await PDFLib.PDFDocument.create();
+                
+                for (const fileInfo of pdfFiles) {
+                    if (!fileInfo.pdfDoc) {
+                        throw new Error(`${fileInfo.name}: PDF 문서를 로드할 수 없습니다.`);
+                    }
+                    
+                    const pages = await mergedPdf.copyPages(fileInfo.pdfDoc, fileInfo.pdfDoc.getPageIndices());
+                    pages.forEach(page => mergedPdf.addPage(page));
+                }
+                
+                const pdfBytes = await mergedPdf.save();
+                const outputFilename = `${filename}.pdf`;
+                addDownloadLink(pdfBytes, outputFilename, 'application/pdf');
+                showStatus('PDF 병합이 완료되었습니다!', 'success');
+            } catch (error) {
+                throw new Error(`PDF 병합 중 오류: ${error.message}`);
+            }
+        }
+        
+        // XLSX 병합
+        async function mergeXLSX(xlsxFiles, filename, mergeType) {
+            try {
+                if (mergeType === 'separate') {
+                    await mergeXLSXSeparate(xlsxFiles, filename);
+                } else {
+                    await mergeXLSXCombine(xlsxFiles, filename);
+                }
+            } catch (error) {
+                throw new Error(`Excel 병합 중 오류: ${error.message}`);
+            }
+        }
+        
+        // Excel 시트 분리 병합
+        async function mergeXLSXSeparate(xlsxFiles, filename) {
+            const mergedWorkbook = XLSX.utils.book_new();
+            let sheetIndex = 1;
+            
+            for (const fileInfo of xlsxFiles) {
+                const workbook = fileInfo.workbook;
+                
+                if (!workbook || !workbook.SheetNames) {
+                    throw new Error(`${fileInfo.name}: Excel 문서를 읽을 수 없습니다.`);
+                }
+                
+                workbook.SheetNames.forEach((sheetName, idx) => {
+                    const sheet = workbook.Sheets[sheetName];
+                    // 시트 이름 길이 제한 (31자)
+                    let newSheetName = xlsxFiles.length > 1 
+                        ? `${fileInfo.name.replace('.xlsx', '')}_${sheetName}` 
+                        : sheetName;
+                    
+                    if (newSheetName.length > 31) {
+                        newSheetName = newSheetName.substring(0, 28) + '...';
+                    }
+                    
+                    try {
+                        XLSX.utils.book_append_sheet(mergedWorkbook, sheet, newSheetName);
+                    } catch (e) {
+                        // 시트 이름이 중복되는 경우 번호를 붙임
+                        XLSX.utils.book_append_sheet(mergedWorkbook, sheet, `${newSheetName}_${sheetIndex}`);
+                        sheetIndex++;
+                    }
+                });
+            }
+            
+            const wbout = XLSX.write(mergedWorkbook, { bookType: 'xlsx', type: 'array' });
+            const outputFilename = `${filename}.xlsx`;
+            addDownloadLink(new Uint8Array(wbout), outputFilename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            showStatus('Excel 파일 병합이 완료되었습니다! (시트 분리)', 'success');
+        }
+        
+        // Excel 시트 통합 병합
+        async function mergeXLSXCombine(xlsxFiles, filename) {
+            const mergedWorkbook = XLSX.utils.book_new();
+            let allData = [];
+            let maxCols = 0;
+            
+            // 모든 파일의 모든 시트에서 데이터 수집
+            for (const fileInfo of xlsxFiles) {
+                const workbook = fileInfo.workbook;
+                
+                if (!workbook || !workbook.SheetNames) {
+                    throw new Error(`${fileInfo.name}: Excel 문서를 읽을 수 없습니다.`);
+                }
+                
+                workbook.SheetNames.forEach((sheetName) => {
+                    const sheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+                    
+                    if (jsonData.length > 0) {
+                        // 파일명과 시트명을 헤더로 추가
+                        allData.push([`--- ${fileInfo.name} - ${sheetName} ---`]);
+                        allData.push(...jsonData);
+                        allData.push([]); // 빈 줄 추가
+                        
+                        // 최대 열 수 계산
+                        jsonData.forEach(row => {
+                            if (row.length > maxCols) maxCols = row.length;
+                        });
+                    }
+                });
+            }
+            
+            if (allData.length === 0) {
+                throw new Error('병합할 데이터가 없습니다.');
+            }
+            
+            // 새로운 시트 생성
+            const newSheet = XLSX.utils.aoa_to_sheet(allData);
+            
+            // 시트를 워크북에 추가
+            XLSX.utils.book_append_sheet(mergedWorkbook, newSheet, '통합데이터');
+            
+            const wbout = XLSX.write(mergedWorkbook, { bookType: 'xlsx', type: 'array' });
+            const outputFilename = `${filename}.xlsx`;
+            addDownloadLink(new Uint8Array(wbout), outputFilename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            showStatus('Excel 파일 병합이 완료되었습니다! (시트 통합)', 'success');
+        }
+        
+        // TXT 병합
+        function mergeTXTs(txtFiles, filename) {
+            try {
+                let mergedContent = '';
+                
+                txtFiles.forEach((fileInfo, index) => {
+                    if (!fileInfo.content && fileInfo.content !== '') {
+                        throw new Error(`${fileInfo.name}: 텍스트 내용을 읽을 수 없습니다.`);
+                    }
+                    
+                    if (index > 0) mergedContent += '\n\n--- 다음 파일: ' + fileInfo.name + ' ---\n\n';
+                    mergedContent += fileInfo.content;
+                });
+                
+                const blob = new Blob([mergedContent], { type: 'text/plain;charset=utf-8' });
+                const outputFilename = `${filename}.txt`;
+                addDownloadLink(blob, outputFilename, 'text/plain');
+                showStatus('텍스트 파일 병합이 완료되었습니다!', 'success');
+            } catch (error) {
+                throw new Error(`텍스트 병합 중 오류: ${error.message}`);
+            }
+        }
+
+        // ODT 병합
+        async function mergeODTs(odtFiles, filename) {
+            try {
+                if (odtFiles.length === 0) return;
+
+                const parser = new DOMParser();
+                const serializer = new XMLSerializer();
+
+                // 1. 첫 번째 파일을 기준으로 사용
+                const baseZip = await JSZip.loadAsync(await odtFiles[0].file.arrayBuffer());
+
+                // Base XMLs
+                const baseContentStr = await baseZip.file("content.xml").async("string");
+                const baseContentXml = parser.parseFromString(baseContentStr, "application/xml");
+                const baseStylesStr = await baseZip.file("styles.xml")?.async("string");
+                const baseStylesXml = baseStylesStr ? parser.parseFromString(baseStylesStr, "application/xml") : null;
+                const baseManifestStr = await baseZip.file("META-INF/manifest.xml").async("string");
+                const baseManifestXml = parser.parseFromString(baseManifestStr, "application/xml");
+                
+                // Base XML Nodes
+                const baseTextNode = baseContentXml.getElementsByTagName("office:text")[0];
+                const baseAutoStylesNode = baseContentXml.getElementsByTagName("office:automatic-styles")[0];
+                const baseStylesNode = baseStylesXml ? baseStylesXml.getElementsByTagName("office:styles")[0] : null;
+                const baseManifestNode = baseManifestXml.getElementsByTagName("manifest:manifest")[0];
+                
+                const existingMediaPaths = new Set(
+                    Array.from(baseManifestNode.getElementsByTagName("manifest:file-entry")).map(entry => entry.getAttribute("manifest:full-path"))
+                );
+                
+                const pageBreakStyleName = "MergePageBreakStyle";
+                // Helper to check if a style already exists, avoiding invalid querySelector syntax
+                const styleExists = (stylesNode, name) => {
+                    if (!stylesNode) return false;
+                    const children = stylesNode.children;
+                    for (let i = 0; i < children.length; i++) {
+                        if (children[i].getAttribute("style:name") === name) {
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+
+                if (baseAutoStylesNode && !styleExists(baseAutoStylesNode, pageBreakStyleName)) {
+                    const pageBreakStyle = baseContentXml.createElementNS("urn:oasis:names:tc:opendocument:xmlns:style:1.0", "style:style");
+                    pageBreakStyle.setAttribute("style:name", pageBreakStyleName);
+                    pageBreakStyle.setAttribute("style:family", "paragraph");
+                    pageBreakStyle.setAttribute("style:parent-style-name", "Standard");
+                    const pageBreakProps = baseContentXml.createElementNS("urn:oasis:names:tc:opendocument:xmlns:style:1.0", "style:paragraph-properties");
+                    pageBreakProps.setAttributeNS("http://www.w3.org/1999/XSL/Format", "fo:break-before", "page");
+                    pageBreakStyle.appendChild(pageBreakProps);
+                    baseAutoStylesNode.appendChild(pageBreakStyle);
+                }
+
+
+                // Helper to recursively update style references in a node
+                const updateStyleReferences = (node, styleMap) => {
+                    if (node.nodeType !== 1) return; // Only process element nodes
+                    
+                    const styleAttributes = ["text:style-name", "table:style-name", "draw:style-name", "style:style-name"];
+                    styleAttributes.forEach(attr => {
+                         if (node.hasAttribute(attr)) {
+                            const originalName = node.getAttribute(attr);
+                            if (styleMap.has(originalName)) {
+                                node.setAttribute(attr, styleMap.get(originalName));
+                            }
+                        }
+                    });
+
+                    if (node.hasChildNodes()) {
+                        node.childNodes.forEach(child => updateStyleReferences(child, styleMap));
+                    }
+                };
+                
+                // 2. 두 번째 파일부터 순회하며 병합
+                for (let i = 1; i < odtFiles.length; i++) {
+                    const fileInfo = odtFiles[i];
+                    const zip = fileInfo.zip;
+                    const filePrefix = `f${i}_`;
+                    const styleNameMap = new Map();
+
+                    // --- Load XMLs from current file ---
+                    const contentStr = await zip.file("content.xml").async("string");
+                    const contentXml = parser.parseFromString(contentStr, "application/xml");
+                    const stylesStr = await zip.file("styles.xml")?.async("string");
+                    const stylesXml = stylesStr ? parser.parseFromString(stylesStr, "application/xml") : null;
+                    const manifestStr = await zip.file("META-INF/manifest.xml").async("string");
+                    const manifestXml = parser.parseFromString(manifestStr, "application/xml");
+
+                    // Function to process and rename styles in a node list
+                    const processStyles = (styleNodes) => {
+                        if(!styleNodes) return;
+                        Array.from(styleNodes).forEach(styleNode => {
+                             const originalName = styleNode.getAttribute("style:name");
+                             if (originalName) {
+                                const newName = filePrefix + originalName;
+                                styleNameMap.set(originalName, newName);
+                                styleNode.setAttribute("style:name", newName);
+                             }
+                        });
+                        // Second pass to update parent styles
+                         Array.from(styleNodes).forEach(styleNode => {
+                            const parentStyle = styleNode.getAttribute("style:parent-style-name");
+                            if (parentStyle && styleNameMap.has(parentStyle)) {
+                                styleNode.setAttribute("style:parent-style-name", styleNameMap.get(parentStyle));
+                            }
+                         });
+                    };
+
+                    // --- 3. Process styles.xml ---
+                    if (stylesXml && baseStylesNode) {
+                        const stylesNode = stylesXml.getElementsByTagName("office:styles")[0];
+                        if (stylesNode) {
+                            processStyles(stylesNode.children);
+                             Array.from(stylesNode.children).forEach(node => {
+                                 baseStylesNode.appendChild(baseStylesXml.importNode(node, true));
+                             });
+                        }
+                    }
+
+                    // --- 4. Process automatic-styles from content.xml ---
+                    const autoStylesNode = contentXml.getElementsByTagName("office:automatic-styles")[0];
+                    if (autoStylesNode) {
+                        processStyles(autoStylesNode.children);
+                        Array.from(autoStylesNode.children).forEach(node => {
+                            baseAutoStylesNode.appendChild(baseContentXml.importNode(node, true));
+                        });
+                    }
+
+                    // --- 5. Add Page Break using the dedicated style ---
+                    const pageBreakPara = baseContentXml.createElementNS("urn:oasis:names:tc:opendocument:xmlns:text:1.0", "text:p");
+                    pageBreakPara.setAttributeNS("urn:oasis:names:tc:opendocument:xmlns:text:1.0", "text:style-name", pageBreakStyleName);
+                    baseTextNode.appendChild(pageBreakPara);
+
+                    // --- 6. Update style references in content and merge ---
+                    const textNode = contentXml.getElementsByTagName("office:text")[0];
+                    if (textNode) {
+                        updateStyleReferences(textNode, styleNameMap);
+                        Array.from(textNode.childNodes).forEach(child => {
+                            baseTextNode.appendChild(baseContentXml.importNode(child, true));
+                        });
+                    }
+
+                    // --- 7. Merge Media Files and Manifest ---
+                    const fileEntries = manifestXml.getElementsByTagName("manifest:file-entry");
+                    for (const fileEntry of fileEntries) {
+                        const fullPath = fileEntry.getAttribute("manifest:full-path");
+                        if (fullPath && fullPath !== "/" && !existingMediaPaths.has(fullPath)) {
+                           if (zip.file(fullPath)) {
+                                const fileData = await zip.file(fullPath).async("uint8array");
+                                baseZip.file(fullPath, fileData);
+                                baseManifestNode.appendChild(baseManifestXml.importNode(fileEntry, true));
+                                existingMediaPaths.add(fullPath);
+                           }
+                        }
+                    }
+                }
+
+                // 8. Save modified XMLs back to the base zip
+                baseZip.file("content.xml", serializer.serializeToString(baseContentXml));
+                if (baseZip.file("styles.xml") && baseStylesXml) {
+                    baseZip.file("styles.xml", serializer.serializeToString(baseStylesXml));
+                }
+                baseZip.file("META-INF/manifest.xml", serializer.serializeToString(baseManifestXml));
+
+                // 9. Generate the final ODT file
+                const odtBytes = await baseZip.generateAsync({ type: "uint8array", mimeType: "application/vnd.oasis.opendocument.text" });
+                const outputFilename = `${filename}.odt`;
+                addDownloadLink(odtBytes, outputFilename, 'application/vnd.oasis.opendocument.text');
+                showStatus('ODT 병합이 완료되었습니다!', 'success');
+
+            } catch (error) {
+                console.error('ODT 병합 오류:', error);
+                throw new Error(`ODT 병합 중 오류: ${error.message}`);
+            }
+        }
+        
+        // 파일 분할
+        async function splitFiles() {
+            const validFiles = selectedFiles.filter(f => !f.hasError);
+            
+            if (validFiles.length !== 1) {
+                showError('파일 개수 오류', `${validFiles.length}개 파일 선택됨`, '분할은 한 번에 하나의 파일만 가능합니다.');
+                return;
+            }
+            
+            const fileInfo = validFiles[0];
+            
+            try {
+                switch(fileInfo.type) {
+                    case 'pdf':
+                        if (currentSplitType === 'range') {
+                            const range = document.getElementById('split-range').value.trim();
+                            
+                            if (!range) {
+                                showError('범위 입력 오류', '분할 범위가 비어있음', '분할할 페이지 번호를 입력해주세요.');
+                                return;
+                            }
+                            
+                            const rangePattern = /^(\d+(-\d+)?)(,\s*\d+(-\d+)?)*$/;
+                            if (!rangePattern.test(range.replace(/\s/g, ''))) {
+                                showError('잘못된 범위 형식', range, '올바른 형식: 1-3, 5, 7-10');
+                                return;
+                            }
+                            
+                            await splitPDFByRange(fileInfo, range);
+                        } else if (currentSplitType === 'chunk') {
+                            const chunkSize = parseInt(document.getElementById('split-chunk-size').value);
+                            
+                            if (isNaN(chunkSize) || chunkSize <= 0) {
+                                showError('잘못된 페이지 분량', '양수 값을 입력해주세요', '각 파일당 페이지 수를 1 이상으로 지정해야 합니다.');
+                                return;
+                            }
+                            
+                            await splitPDFByChunks(fileInfo, chunkSize);
+                        }
+                        break;
+                        
+                    case 'xlsx':
+                        if (currentExcelSplitType === 'sheet') {
+                            splitXLSXBySheets(fileInfo);
+                        } else if (currentExcelSplitType === 'row') {
+                            const rowSize = parseInt(document.getElementById('split-row-size').value);
+                            
+                            if (isNaN(rowSize) || rowSize <= 0) {
+                                showError('잘못된 행 분량', '양수 값을 입력해주세요', '각 파일당 행 수를 1 이상으로 지정해야 합니다.');
+                                return;
+                            }
+                            
+                            splitXLSXByRows(fileInfo, rowSize);
+                        }
+                        break;
+                        
+                    case 'txt':
+                        if (currentTxtSplitType === 'range') {
+                            const range = document.getElementById('txt-split-range').value.trim();
+                            
+                            if (!range) {
+                                showError('범위 입력 오류', '분할 범위가 비어있음', '분할할 라인 번호를 입력해주세요.');
+                                return;
+                            }
+                            
+                            const rangePattern = /^(\d+(-\d+)?)(,\s*\d+(-\d+)?)*$/;
+                            if (!rangePattern.test(range.replace(/\s/g, ''))) {
+                                showError('잘못된 범위 형식', range, '올바른 형식: 1-3, 5, 7-10');
+                                return;
+                            }
+                            
+                            splitTXTByRange(fileInfo, range);
+                        } else if (currentTxtSplitType === 'chunk') {
+                            const chunkSize = parseInt(document.getElementById('txt-split-chunk-size').value);
+                            
+                            if (isNaN(chunkSize) || chunkSize <= 0) {
+                                showError('잘못된 라인 분량', '양수 값을 입력해주세요', '각 파일당 라인 수를 1 이상으로 지정해야 합니다.');
+                                return;
+                            }
+                            
+                            splitTXTByChunks(fileInfo, chunkSize);
+                        }
+                        break;
+
+                    case 'odt':
+                        if (currentOdtSplitType === 'range') {
+                            const range = document.getElementById('odt-split-range').value.trim();
+                            if (!range) {
+                                showError('범위 입력 오류', '분할 범위가 비어있음', '분할할 문단 번호를 입력해주세요.');
+                                return;
+                            }
+                            const rangePattern = /^(\d+(-\d+)?)(,\s*\d+(-\d+)?)*$/;
+                            if (!rangePattern.test(range.replace(/\s/g, ''))) {
+                                showError('잘못된 범위 형식', range, '올바른 형식: 1-10, 15, 20-25');
+                                return;
+                            }
+                            await splitODTByRange(fileInfo, range);
+                        } else if (currentOdtSplitType === 'chunk') {
+                            const chunkSize = parseInt(document.getElementById('odt-split-chunk-size').value);
+                            if (isNaN(chunkSize) || chunkSize <= 0) {
+                                showError('잘못된 문단 분량', '양수 값을 입력해주세요', '각 파일당 문단 수를 1 이상으로 지정해야 합니다.');
+                                return;
+                            }
+                            await splitODTByChunks(fileInfo, chunkSize);
+                        }
+                        break;
+                        
+                    default:
+                        showError('분할 불가', fileInfo.type, '이 파일 형식은 분할을 지원하지 않습니다.');
+                }
+                
+                // 다운로드 안내 메시지
+                showStatus('파일 분할이 완료되었습니다. 다운로드 버튼을 클릭하세요.', 'info');
+                
+            } catch (error) {
+                console.error('분할 오류:', error);
+                showError('분할 실패', error.message, '범위나 페이지 분량을 다시 확인해주세요.');
+            }
+        }
+        
+        // PDF 범위 분할
+        async function splitPDFByRange(fileInfo, range) {
+            const ranges = parseRange(range, fileInfo.pageCount);
+            
+            if (ranges.length === 0) {
+                throw new Error(`유효한 페이지가 없습니다. (전체 ${fileInfo.pageCount} 페이지)`);
+            }
+            
+            try {
+                const newPdf = await PDFLib.PDFDocument.create();
+                
+                for (const pageNum of ranges) {
+                    if (pageNum > 0 && pageNum <= fileInfo.pageCount) {
+                        // 원본 PDF에서 페이지를 복사
+                        const [copiedPage] = await newPdf.copyPages(fileInfo.pdfDoc, [pageNum - 1]);
+                        newPdf.addPage(copiedPage);
+                    }
+                }
+                
+                if (newPdf.getPageCount() === 0) {
+                    throw new Error('선택한 범위에 유효한 페이지가 없습니다.');
+                }
+                
+                const pdfBytes = await newPdf.save();
+                const rangeStr = range.replace(/\s/g, '').replace(/,/g, '_');
+                const outputFilename = fileInfo.name.replace('.pdf', `_pages_${rangeStr}.pdf`);
+                addDownloadLink(pdfBytes, outputFilename, 'application/pdf');
+                showStatus(`PDF 분할 완료! (${newPdf.getPageCount()} 페이지)`, 'success');
+            } catch (error) {
+                throw new Error(`PDF 분할 중 오류: ${error.message}`);
+            }
+        }
+        
+        // PDF 청크 분할
+        async function splitPDFByChunks(fileInfo, chunkSize) {
+            try {
+                if (fileInfo.pageCount === 0) {
+                    throw new Error('페이지가 없는 PDF 파일입니다.');
+                }
+                
+                // 전체 페이지 수를 기준으로 청크 개수 계산
+                const totalChunks = Math.ceil(fileInfo.pageCount / chunkSize);
+                const fileBase = fileInfo.name.replace('.pdf', '');
+                
+                // 여러 PDF 파일 생성
+                for (let i = 0; i < totalChunks; i++) {
+                    const startPage = i * chunkSize + 1;
+                    const endPage = Math.min((i + 1) * chunkSize, fileInfo.pageCount);
+                    
+                    // 새 PDF 생성
+                    const newPdf = await PDFLib.PDFDocument.create();
+                    
+                    // 페이지 범위 계산
+                    const pageIndices = [];
+                    for (let p = startPage; p <= endPage; p++) {
+                        pageIndices.push(p - 1); // 0-based index
+                    }
+                    
+                    // 페이지 복사
+                    const copiedPages = await newPdf.copyPages(fileInfo.pdfDoc, pageIndices);
+                    copiedPages.forEach(page => newPdf.addPage(page));
+                    
+                    // PDF 저장
+                    const pdfBytes = await newPdf.save();
+                    const outputFilename = `${fileBase}_part${i+1}_${startPage}-${endPage}.pdf`;
+                    
+                    // 다운로드 링크 추가
+                    addDownloadLink(pdfBytes, outputFilename, 'application/pdf');
+                }
+                
+                showStatus(`PDF 분할 완료! (총 ${totalChunks}개 파일)`, 'success');
+                
+            } catch (error) {
+                throw new Error(`PDF 청크 분할 중 오류: ${error.message}`);
+            }
+        }
+        
+        // Excel 시트별 분할 (새로운 기능)
+        function splitXLSXBySheets(fileInfo) {
+            try {
+                if (fileInfo.sheetCount === 0) {
+                    throw new Error('시트가 없는 Excel 파일입니다.');
+                }
+                
+                const fileBase = fileInfo.name.replace('.xlsx', '');
+                const workbook = fileInfo.workbook;
+                
+                // 각 시트별로 새 파일 생성
+                for (let i = 0; i < fileInfo.sheetCount; i++) {
+                    const sheetName = fileInfo.sheetNames[i];
+                    const sheet = workbook.Sheets[sheetName];
+                    
+                    // 새 워크북 생성
+                    const newWorkbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(newWorkbook, sheet, sheetName);
+                    
+                    // Excel 저장
+                    const wbout = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
+                    const outputFilename = `${fileBase}_${sheetName}.xlsx`;
+                    
+                    // 다운로드 링크 추가
+                    addDownloadLink(new Uint8Array(wbout), outputFilename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                }
+                
+                showStatus(`Excel 시트별 분할 완료! (총 ${fileInfo.sheetCount}개 파일)`, 'success');
+                
+            } catch (error) {
+                throw new Error(`Excel 시트별 분할 중 오류: ${error.message}`);
+            }
+        }
+        
+        // Excel 행 단위 분할 (새로운 기능)
+        function splitXLSXByRows(fileInfo, rowSize) {
+            try {
+                if (fileInfo.sheetCount === 0) {
+                    throw new Error('시트가 없는 Excel 파일입니다.');
+                }
+                
+                const fileBase = fileInfo.name.replace('.xlsx', '');
+                const workbook = fileInfo.workbook;
+                
+                // 첫 번째 시트만 분할
+                const firstSheetName = fileInfo.sheetNames[0];
+                const firstSheet = workbook.Sheets[firstSheetName];
+                
+                // 시트 데이터를 배열로 변환
+                const data = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                const totalRows = data.length;
+                
+                if (totalRows === 0) {
+                    throw new Error('첫 번째 시트에 데이터가 없습니다.');
+                }
+                
+                // 헤더 행 (첫 번째 행)
+                const headerRow = data[0];
+                
+                // 전체 행을 기준으로 청크 개수 계산 (헤더 제외)
+                const dataRows = data.slice(1);
+                const totalChunks = Math.ceil(dataRows.length / rowSize);
+                
+                // 여러 Excel 파일 생성
+                for (let i = 0; i < totalChunks; i++) {
+                    const startRow = i * rowSize;
+                    const endRow = Math.min((i + 1) * rowSize, dataRows.length);
+                    
+                    // 헤더와 해당 범위의 데이터를 포함한 새 데이터셋 생성
+                    const chunkData = [headerRow, ...dataRows.slice(startRow, endRow)];
+                    
+                    // 새 워크북 생성
+                    const newWorkbook = XLSX.utils.book_new();
+                    const newSheet = XLSX.utils.aoa_to_sheet(chunkData);
+                    XLSX.utils.book_append_sheet(newWorkbook, newSheet, firstSheetName);
+                    
+                    // Excel 저장
+                    const wbout = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
+                    const outputFilename = `${fileBase}_rows${startRow+1}-${startRow+endRow}.xlsx`;
+                    
+                    // 다운로드 링크 추가
+                    addDownloadLink(new Uint8Array(wbout), outputFilename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                }
+                
+                showStatus(`Excel 행 단위 분할 완료! (총 ${totalChunks}개 파일)`, 'success');
+                
+            } catch (error) {
+                throw new Error(`Excel 행 단위 분할 중 오류: ${error.message}`);
+            }
+        }
+        
+        // TXT 범위 분할
+        function splitTXTByRange(fileInfo, range) {
+            const lineNumbers = parseRange(range, fileInfo.lineCount);
+            
+            if (lineNumbers.length === 0) {
+                throw new Error(`유효한 라인이 없습니다. (전체 ${fileInfo.lineCount} 라인)`);
+            }
+            
+            try {
+                let splitContent = '';
+                let addedLines = 0;
+                
+                lineNumbers.forEach((lineNum, index) => {
+                    if (lineNum > 0 && lineNum <= fileInfo.lineCount) {
+                        if (index > 0) splitContent += '\n';
+                        splitContent += fileInfo.lines[lineNum - 1];
+                        addedLines++;
+                    }
+                });
+                
+                if (addedLines === 0) {
+                    throw new Error('선택한 범위에 유효한 라인이 없습니다.');
+                }
+                
+                const blob = new Blob([splitContent], { type: 'text/plain;charset=utf-8' });
+                const rangeStr = range.replace(/\s/g, '').replace(/,/g, '_');
+                const outputFilename = fileInfo.name.replace('.txt', `_lines_${rangeStr}.txt`);
+                addDownloadLink(blob, outputFilename, 'text/plain');
+                showStatus(`텍스트 분할 완료! (${addedLines} 라인)`, 'success');
+            } catch (error) {
+                throw new Error(`텍스트 분할 중 오류: ${error.message}`);
+            }
+        }
+        
+        function splitTXTByChunks(fileInfo, chunkSize) {
+            try {
+                if (fileInfo.lineCount === 0) {
+                    throw new Error('라인이 없는 텍스트 파일입니다.');
+                }
+                
+                const totalChunks = Math.ceil(fileInfo.lineCount / chunkSize);
+                const fileBase = fileInfo.name.replace('.txt', '');
+                const lines = fileInfo.lines;
+                
+                for (let i = 0; i < totalChunks; i++) {
+                    const startLine = i * chunkSize;
+                    const endLine = startLine + chunkSize;
+                    const chunkLines = lines.slice(startLine, endLine);
+                    const chunkContent = chunkLines.join('\n');
+                    
+                    const outputFilename = `${fileBase}_part${i+1}_${startLine + 1}-${Math.min(endLine, fileInfo.lineCount)}.txt`;
+                    addDownloadLink(new Blob([chunkContent], { type: 'text/plain;charset=utf-8' }), outputFilename, 'text/plain');
+                }
+                
+                showStatus(`텍스트 분할 완료! (총 ${totalChunks}개 파일)`, 'success');
+            } catch (error) {
+                throw new Error(`텍스트 청크 분할 중 오류: ${error.message}`);
+            }
+        }
+
+        // ODT 분할을 위한 헬퍼: 새 ODT 파일 생성
+        async function createNewOdt(baseZip, contentXml, filename) {
+            const newZip = new JSZip();
+            const serializer = new XMLSerializer();
+
+            // 원본 zip에서 content.xml을 제외한 모든 파일 복사
+            for (const path in baseZip.files) {
+                if (path !== "content.xml") {
+                    const file = baseZip.files[path];
+                    newZip.file(path, await file.async("uint8array"));
+                }
+            }
+
+            // 새로운 content.xml 추가
+            const newContentStr = serializer.serializeToString(contentXml);
+            newZip.file("content.xml", newContentStr);
+
+            // ODT 파일 생성 및 다운로드 링크 추가
+            const odtBytes = await newZip.generateAsync({ type: "uint8array", mimeType: "application/vnd.oasis.opendocument.text" });
+            addDownloadLink(odtBytes, filename, 'application/vnd.oasis.opendocument.text');
+        }
+
+        // ODT 분할을 위한 헬퍼: 내용이 비워진 기본 XML 문서 생성
+        async function createBaseOdtXml(baseContentXml) {
+            const newXml = baseContentXml.cloneNode(true);
+            const textNode = newXml.getElementsByTagName("office:text")[0];
+            if (textNode) {
+                while (textNode.firstChild) {
+                    textNode.removeChild(textNode.firstChild);
+                }
+            }
+            return newXml;
+        }
+
+        // ODT 범위 분할
+        async function splitODTByRange(fileInfo, range) {
+            const ranges = parseRange(range, fileInfo.paragraphCount);
+            if (ranges.length === 0) {
+                throw new Error(`유효한 문단이 없습니다. (전체 ${fileInfo.paragraphCount} 문단)`);
+            }
+
+            try {
+                const parser = new DOMParser();
+                const contentStr = await fileInfo.zip.file("content.xml").async("string");
+                const contentXml = parser.parseFromString(contentStr, "application/xml");
+                const textNodeForSplit = contentXml.getElementsByTagName("office:text")[0];
+                const paragraphs = textNodeForSplit ? Array.from(textNodeForSplit.children) : [];
+
+
+                const newOdtXml = await createBaseOdtXml(contentXml);
+                const newTextNode = newOdtXml.getElementsByTagName("office:text")[0];
+
+                ranges.forEach(paraNum => {
+                    if (paraNum > 0 && paraNum <= paragraphs.length) {
+                        newTextNode.appendChild(paragraphs[paraNum - 1].cloneNode(true));
+                    }
+                });
+
+                if (newTextNode.children.length === 0) {
+                    throw new Error('선택한 범위에 유효한 문단이 없습니다.');
+                }
+
+                const rangeStr = range.replace(/\s/g, '').replace(/,/g, '_');
+                const outputFilename = fileInfo.name.replace('.odt', `_paras_${rangeStr}.odt`);
+                await createNewOdt(fileInfo.zip, newOdtXml, outputFilename);
+                showStatus(`ODT 분할 완료! (${newTextNode.children.length} 문단)`, 'success');
+
+            } catch (error) {
+                throw new Error(`ODT 범위 분할 중 오류: ${error.message}`);
+            }
+        }
+
+        // ODT 청크 분할
+        async function splitODTByChunks(fileInfo, chunkSize) {
+            try {
+                if (fileInfo.paragraphCount === 0) {
+                    throw new Error('문단이 없는 ODT 파일입니다.');
+                }
+
+                const parser = new DOMParser();
+                const contentStr = await fileInfo.zip.file("content.xml").async("string");
+                const contentXml = parser.parseFromString(contentStr, "application/xml");
+                const textNodeForSplit = contentXml.getElementsByTagName("office:text")[0];
+                const paragraphs = textNodeForSplit ? Array.from(textNodeForSplit.children) : [];
+
+                const totalChunks = Math.ceil(paragraphs.length / chunkSize);
+                const fileBase = fileInfo.name.replace('.odt', '');
+
+                for (let i = 0; i < totalChunks; i++) {
+                    const startPara = i * chunkSize;
+                    const endPara = startPara + chunkSize;
+                    const chunkParas = paragraphs.slice(startPara, endPara);
+
+                    const newOdtXml = await createBaseOdtXml(contentXml);
+                    const newTextNode = newOdtXml.getElementsByTagName("office:text")[0];
+                    chunkParas.forEach(p => newTextNode.appendChild(p.cloneNode(true)));
+
+                    const outputFilename = `${fileBase}_part${i+1}_${startPara + 1}-${Math.min(endPara, paragraphs.length)}.odt`;
+                    await createNewOdt(fileInfo.zip, newOdtXml, outputFilename);
+                }
+
+                showStatus(`ODT 분할 완료! (총 ${totalChunks}개 파일)`, 'success');
+
+            } catch (error) {
+                throw new Error(`ODT 청크 분할 중 오류: ${error.message}`);
+            }
+        }
+        
+        // 범위 문자열 파싱 (예: "1-3, 5, 7-10")
+        function parseRange(rangeString, maxValue) {
+            const ranges = [];
+            const parts = rangeString.split(',');
+            
+            parts.forEach(part => {
+                const trimmed = part.trim();
+                if (trimmed.includes('-')) {
+                    const [start, end] = trimmed.split('-').map(n => parseInt(n.trim()));
+                    if (!isNaN(start) && !isNaN(end)) {
+                        if (start > end) {
+                            throw new Error(`잘못된 범위: ${start}-${end} (시작값이 끝값보다 큽니다)`);
+                        }
+                        for (let i = start; i <= end && i <= maxValue; i++) {
+                            if (i > 0) ranges.push(i);
+                        }
+                    }
+                } else {
+                    const num = parseInt(trimmed);
+                    if (!isNaN(num) && num > 0 && num <= maxValue) {
+                        ranges.push(num);
+                    }
+                }
+            });
+            
+            return [...new Set(ranges)].sort((a, b) => a - b);
+        }
+        
+        // 상태 메시지 표시
+        function showStatus(message, type) {
+            const statusElement = document.getElementById('status-message');
+            statusElement.className = `status-message ${type}`;
+            statusElement.innerHTML = message;
+            statusElement.style.display = 'block';
+            
+            if (type === 'success' && !message.includes('처리 중')) {
+                setTimeout(() => {
+                    statusElement.style.display = 'none';
+                }, 5000);
+            } else if (type === 'info') {
+                 // 정보 메시지는 계속 표시
+            } else {
+                setTimeout(() => {
+                    statusElement.style.display = 'none';
+                }, 7000);
+            }
+        }
+        
+        // 전역 드래그 이벤트 방지 (파일이 브라우저에서 열리는 것 방지)
+        document.addEventListener('dragover', (e) => {
+            e.preventDefault();
+        });
+        
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
+
