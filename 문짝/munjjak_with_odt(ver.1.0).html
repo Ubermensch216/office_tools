@@ -1539,9 +1539,8 @@
                 const baseStylesNames = collectStyleNames(baseStylesRoot); 
                 for (const n of collectStyleNames(baseStylesAuto)) baseStylesNames.add(n);
                 
-                while (baseOfficeText.firstChild) baseOfficeText.removeChild(baseOfficeText.firstChild);
-                
-                for (let i = 0; i < fileList.length; i++) {
+                // 첫 번째 문서는 그대로 유지하고, 두 번째 문서부터 추가
+                for (let i = 1; i < fileList.length; i++) {
                     const fd = odtProcessingData[fileList[i].name];
                     const doc = parse(fd.contentXml);
                     const hrefMap = {};
@@ -1558,7 +1557,23 @@
                     
                     const srcText = ensure(doc.getElementsByTagNameNS(ODTNS.OFFICE, 'text')[0]);
                     const fragment = doc.createElement('div');
-                    for (const n of Array.from(srcText.childNodes || [])) fragment.appendChild(n.cloneNode(true));
+
+                    // 빈 문단도 포함하여 모든 문단을 명시적으로 처리
+                    for (const n of Array.from(srcText.childNodes || [])) {
+                        const clonedNode = n.cloneNode(true);
+
+                        // 빈 문단(<text:p>)의 경우 공백 유지를 위한 처리
+                        if (n.nodeType === 1 && n.namespaceURI === ODTNS.TEXT && n.localName === 'p') {
+                            const textContent = n.textContent || '';
+                            if (textContent.trim() === '') {
+                                // 빈 문단에 non-breaking space 추가하여 공백 보존
+                                const textNode = doc.createTextNode('\u00A0'); // &nbsp;
+                                clonedNode.appendChild(textNode);
+                            }
+                        }
+
+                        fragment.appendChild(clonedNode);
+                    }
                     rewriteImageHref(fragment, hrefMap);
                     
                     const srcAuto = doc.getElementsByTagNameNS(ODTNS.OFFICE, 'automatic-styles')[0];
@@ -1608,26 +1623,38 @@
                         }
                     }
                     
-                    if (i > 0) {
-                        if (option === 'pagebreak') {
-                            const p = baseContent.createElementNS(ODTNS.TEXT, 'text:p');
-                            const br = baseContent.createElementNS(ODTNS.TEXT, 'text:soft-page-break'); 
-                            p.appendChild(br); 
-                            baseOfficeText.appendChild(p);
-                        } else if (option === 'section') {
-                            const sec = baseContent.createElementNS(ODTNS.TEXT, 'text:section');
-                            sec.setAttribute('text:name', 'Section' + (i + 1));
-                            (function() {
-                                const nodes = Array.from(fragment.childNodes); 
-                                for (const n of nodes) { 
-                                    sec.appendChild(baseContent.importNode(n, true)); 
-                                }
-                            })();
-                            baseOfficeText.appendChild(sec);
-                            continue;
-                        } else {
-                            baseOfficeText.appendChild(baseContent.createElementNS(ODTNS.TEXT, 'text:p'));
-                        }
+                    // 모든 추가 문서에 대해 구분자 추가 (i는 1부터 시작)
+                    if (option === 'pagebreak') {
+                        // 페이지 구분과 함께 마진 붕괴 방지를 위한 빈 문단 추가
+                        const spacerP = baseContent.createElementNS(ODTNS.TEXT, 'text:p');
+                        spacerP.appendChild(baseContent.createTextNode('\u00A0')); // 공백 유지용
+                        baseOfficeText.appendChild(spacerP);
+
+                        const p = baseContent.createElementNS(ODTNS.TEXT, 'text:p');
+                        const br = baseContent.createElementNS(ODTNS.TEXT, 'text:soft-page-break');
+                        p.appendChild(br);
+                        baseOfficeText.appendChild(p);
+
+                        // 페이지 구분 후에도 추가 공백
+                        const spacerP2 = baseContent.createElementNS(ODTNS.TEXT, 'text:p');
+                        spacerP2.appendChild(baseContent.createTextNode('\u00A0'));
+                        baseOfficeText.appendChild(spacerP2);
+                    } else if (option === 'section') {
+                        const sec = baseContent.createElementNS(ODTNS.TEXT, 'text:section');
+                        sec.setAttribute('text:name', 'Section' + (i + 1));
+                        (function() {
+                            const nodes = Array.from(fragment.childNodes);
+                            for (const n of nodes) {
+                                sec.appendChild(baseContent.importNode(n, true));
+                            }
+                        })();
+                        baseOfficeText.appendChild(sec);
+                        continue;
+                    } else {
+                        // 연속 병합의 경우에도 마진 붕괴 방지를 위한 공백 문단 추가
+                        const spacerP = baseContent.createElementNS(ODTNS.TEXT, 'text:p');
+                        spacerP.appendChild(baseContent.createTextNode('\u00A0')); // 공백 보존
+                        baseOfficeText.appendChild(spacerP);
                     }
                     
                     (function() {
