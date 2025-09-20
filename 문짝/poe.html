@@ -945,7 +945,7 @@
             }
         }
 
-        // PDF 병합
+        // 기존 병합 함수들...
         async function mergePDF(outputFileName) {
             const mergedPdf = await PDFLib.PDFDocument.create();
             
@@ -961,7 +961,6 @@
                         outputFileName + '.pdf');
         }
 
-        // Excel 병합
         async function mergeExcel(outputFileName) {
             const mergeOption = document.querySelector('input[name="excelMerge"]:checked').value;
             const newWorkbook = XLSX.utils.book_new();
@@ -1001,7 +1000,6 @@
                         outputFileName + '.xlsx');
         }
 
-        // TXT 병합
         async function mergeTXT(outputFileName) {
             let mergedContent = '';
             
@@ -1014,7 +1012,12 @@
                         outputFileName + '.txt');
         }
 
-        // ODT 병합 - 간소화된 버전
+        // 정규표현식 특수문자 이스케이프 함수
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // ODT 병합 - 수정된 버전
         async function mergeODT(outputFileName) {
             const mergeOption = document.querySelector('input[name="odtMerge"]:checked').value;
             
@@ -1023,20 +1026,20 @@
                 
                 const baseZip = new JSZip();
                 let globalImageCounter = 1000;
-                const processedImages = new Set();
+                const processedImages = new Map();
                 
                 // 첫 번째 파일을 기본 템플릿으로 사용
                 const firstFile = selectedFiles[0];
                 const firstArrayBuffer = await firstFile.arrayBuffer();
                 const firstZip = await JSZip.loadAsync(firstArrayBuffer);
                 
-                // 모든 파일 복사
+                // 기본 파일 구조 복사 (content.xml 제외)
                 for (const [path, file] of Object.entries(firstZip.files)) {
-                    if (!file.dir) {
+                    if (path !== 'content.xml' && !file.dir) {
                         const content = await file.async('arraybuffer');
                         baseZip.file(path, content);
                         if (path.startsWith('Pictures/')) {
-                            processedImages.add(path);
+                            processedImages.set(path, path);
                         }
                     }
                 }
@@ -1046,36 +1049,30 @@
                 const parser = new DOMParser();
                 const baseDoc = parser.parseFromString(baseContentXml, 'text/xml');
                 
-                // 병합할 콘텐츠를 저장할 배열
-                const mergedContent = [];
+                // 모든 문서의 내용을 저장할 배열
+                const documentFragments = [];
                 
-                // 첫 번째 파일의 콘텐츠 추출
-                const firstBody = baseDoc.getElementsByTagName('office:body')[0];
-                const firstText = firstBody?.getElementsByTagName('office:text')[0];
-                if (firstText) {
-                    const children = Array.from(firstText.children);
-                    mergedContent.push({
-                        elements: children.map(el => el.outerHTML),
-                        styles: extractStyles(baseDoc)
-                    });
-                }
-                
-                // 나머지 파일 처리
-                for (let i = 1; i < selectedFiles.length; i++) {
-                    const file = selectedFiles[i];
+                // 각 파일 처리
+                for (let fileIndex = 0; fileIndex < selectedFiles.length; fileIndex++) {
+                    const file = selectedFiles[fileIndex];
                     const arrayBuffer = await file.arrayBuffer();
                     const odtZip = await JSZip.loadAsync(arrayBuffer);
                     
-                    // 이미지 파일 복사
+                    // 이미지 파일 처리
+                    const localImageMap = new Map();
                     for (const [path, zipFile] of Object.entries(odtZip.files)) {
                         if (path.startsWith('Pictures/') && !zipFile.dir) {
-                            if (!processedImages.has(path)) {
+                            let newPath = path;
+                            if (fileIndex > 0 && !processedImages.has(path)) {
                                 const content = await zipFile.async('arraybuffer');
                                 const ext = path.split('.').pop();
-                                const newPath = `Pictures/${globalImageCounter++}.${ext}`;
+                                newPath = `Pictures/img_${globalImageCounter++}.${ext}`;
                                 baseZip.file(newPath, content);
-                                processedImages.add(newPath);
+                                processedImages.set(path, newPath);
+                            } else if (processedImages.has(path) && fileIndex > 0) {
+                                newPath = processedImages.get(path);
                             }
+                            localImageMap.set(path, newPath);
                         }
                     }
                     
@@ -1083,16 +1080,98 @@
                     const contentXml = await odtZip.files['content.xml'].async('text');
                     const contentDoc = parser.parseFromString(contentXml, 'text/xml');
                     
-                    // 콘텐츠 추출
+                    // 스타일 추출 및 이름 변경
+                    const styleMapping = new Map();
+                    const suffix = `_doc${fileIndex + 1}`;
+                    
+                    const autoStyles = contentDoc.getElementsByTagName('office:automatic-styles')[0];
+                    const modifiedStyles = [];
+                    
+                    if (autoStyles) {
+                        const styles = Array.from(autoStyles.children);
+                        for (const style of styles) {
+                            const styleName = style.getAttribute('style:name');
+                            if (styleName) {
+                                const newStyleName = styleName + suffix;
+                                styleMapping.set(styleName, newStyleName);
+                                
+                                // 스타일 복사 및 이름 변경
+                                const newStyle = style.cloneNode(true);
+                                newStyle.setAttribute('style:name', newStyleName);
+                                
+                                // 부모 스타일 참조 업데이트
+                                const parentStyle = newStyle.getAttribute('style:parent-style-name');
+                                if (parentStyle && !parentStyle.includes('_doc')) {
+                                    newStyle.setAttribute('style:parent-style-name', parentStyle + suffix);
+                                }
+                                
+                                modifiedStyles.push(newStyle.outerHTML);
+                            }
+                        }
+                    }
+                    
+                    // 텍스트 콘텐츠 추출 및 스타일/이미지 참조 업데이트
                     const body = contentDoc.getElementsByTagName('office:body')[0];
                     const text = body?.getElementsByTagName('office:text')[0];
+                    const modifiedContent = [];
+                    
                     if (text) {
                         const children = Array.from(text.children);
-                        mergedContent.push({
-                            elements: children.map(el => el.outerHTML),
-                            styles: extractStyles(contentDoc)
-                        });
+                        for (const child of children) {
+                            let elementHtml = child.outerHTML;
+                            
+                            // 스타일 참조 업데이트 - 정규표현식 특수문자 이스케이프
+                            for (const [oldStyle, newStyle] of styleMapping) {
+                                const escapedOldStyle = escapeRegExp(oldStyle);
+                                
+                                // 각 속성별로 개별적으로 처리
+                                elementHtml = elementHtml.replace(
+                                    new RegExp(`text:style-name="${escapedOldStyle}"`, 'g'),
+                                    `text:style-name="${newStyle}"`
+                                );
+                                elementHtml = elementHtml.replace(
+                                    new RegExp(`table:style-name="${escapedOldStyle}"`, 'g'),
+                                    `table:style-name="${newStyle}"`
+                                );
+                                elementHtml = elementHtml.replace(
+                                    new RegExp(`draw:style-name="${escapedOldStyle}"`, 'g'),
+                                    `draw:style-name="${newStyle}"`
+                                );
+                                elementHtml = elementHtml.replace(
+                                    new RegExp(`style:name="${escapedOldStyle}"`, 'g'),
+                                    `style:name="${newStyle}"`
+                                );
+                            }
+                            
+                            // 이미지 경로 업데이트
+                            for (const [oldPath, newPath] of localImageMap) {
+                                const escapedOldPath = escapeRegExp(oldPath);
+                                elementHtml = elementHtml.replace(
+                                    new RegExp(`xlink:href="${escapedOldPath}"`, 'g'),
+                                    `xlink:href="${newPath}"`
+                                );
+                            }
+                            
+                            modifiedContent.push(elementHtml);
+                        }
                     }
+                    
+                    // 폰트 선언 추출
+                    const fontDecls = contentDoc.getElementsByTagName('office:font-face-decls')[0];
+                    const fonts = [];
+                    if (fontDecls) {
+                        const fontElements = fontDecls.getElementsByTagName('style:font-face');
+                        for (const font of fontElements) {
+                            fonts.push(font.outerHTML);
+                        }
+                    }
+                    
+                    documentFragments.push({
+                        styles: modifiedStyles,
+                        content: modifiedContent,
+                        fonts: fonts,
+                        fileIndex: fileIndex
+                    });
                 }
                 
                 // 새로운 content.xml 생성
@@ -1121,34 +1200,32 @@
     <office:scripts/>
     <office:font-face-decls>`;
                 
-                // 폰트 선언 추가
-                const fonts = baseDoc.getElementsByTagName('office:font-face-decls')[0];
-                if (fonts) {
-                    const fontElements = fonts.getElementsByTagName('style:font-face');
-                    for (let font of fontElements) {
-                        newContentXml += '\n        ' + font.outerHTML;
-                    }
+                // 모든 폰트 선언 병합 (중복 제거)
+                const allFonts = new Set();
+                for (const fragment of documentFragments) {
+                    fragment.fonts.forEach(font => allFonts.add(font));
+                }
+                for (const font of allFonts) {
+                    newContentXml += '\n        ' + font;
                 }
                 
                 newContentXml += `
     </office:font-face-decls>
     <office:automatic-styles>`;
                 
-                // 모든 스타일 병합
-                const allStyles = new Set();
-                for (const content of mergedContent) {
-                    content.styles.forEach(style => allStyles.add(style));
-                }
-                
                 // 페이지 나누기 스타일 추가
                 if (mergeOption === 'pagebreak') {
-                    allStyles.add(`<style:style style:name="PageBreak" style:family="paragraph">
-        <style:paragraph-properties fo:break-before="page"/>
-    </style:style>`);
+                    newContentXml += `
+        <style:style style:name="MunjjakPageBreak" style:family="paragraph">
+            <style:paragraph-properties fo:break-before="page"/>
+        </style:style>`;
                 }
                 
-                for (const style of allStyles) {
-                    newContentXml += '\n        ' + style;
+                // 모든 스타일 병합
+                for (const fragment of documentFragments) {
+                    for (const style of fragment.styles) {
+                        newContentXml += '\n        ' + style;
+                    }
                 }
                 
                 newContentXml += `
@@ -1157,22 +1234,24 @@
         <office:text>`;
                 
                 // 콘텐츠 병합
-                for (let i = 0; i < mergedContent.length; i++) {
+                for (let i = 0; i < documentFragments.length; i++) {
+                    const fragment = documentFragments[i];
+                    
+                    // 페이지 나누기 삽입
                     if (i > 0 && mergeOption === 'pagebreak') {
-                        // 페이지 나누기 추가
-                        newContentXml += '\n            <text:p text:style-name="PageBreak"/>';
+                        newContentXml += '\n            <text:p text:style-name="MunjjakPageBreak"/>';
                     }
                     
-                    if (mergeOption === 'section' && i > 0) {
-                        // 섹션으로 감싸기
+                    // 섹션으로 감싸기
+                    if (mergeOption === 'section') {
                         newContentXml += `\n            <text:section text:name="Section${i + 1}">`;
-                        for (const element of mergedContent[i].elements) {
+                        for (const element of fragment.content) {
                             newContentXml += '\n                ' + element;
                         }
                         newContentXml += '\n            </text:section>';
                     } else {
                         // 일반 병합
-                        for (const element of mergedContent[i].elements) {
+                        for (const element of fragment.content) {
                             newContentXml += '\n            ' + element;
                         }
                     }
@@ -1201,19 +1280,6 @@
                 alert('ODT 파일 병합 중 오류가 발생했습니다: ' + error.message);
             }
         }
-        
-        // 스타일 추출 함수
-        function extractStyles(doc) {
-            const styles = [];
-            const autoStyles = doc.getElementsByTagName('office:automatic-styles')[0];
-            if (autoStyles) {
-                const styleElements = autoStyles.children;
-                for (let style of styleElements) {
-                    styles.push(style.outerHTML);
-                }
-            }
-            return styles;
-        }
 
         // 파일 분할 함수들
         async function splitFiles(fileType) {
@@ -1234,7 +1300,7 @@
             }
         }
 
-        // PDF 분할
+        // 기존 분할 함수들...
         async function splitPDF() {
             const splitOption = document.querySelector('input[name="pdfSplit"]:checked').value;
             const file = selectedFiles[0];
@@ -1278,7 +1344,6 @@
             }
         }
 
-        // Excel 분할
         async function splitExcel() {
             const splitOption = document.querySelector('input[name="excelSplit"]:checked').value;
             const file = selectedFiles[0];
@@ -1314,7 +1379,6 @@
             }
         }
 
-        // TXT 분할
         async function splitTXT() {
             const splitOption = document.querySelector('input[name="txtSplit"]:checked').value;
             const file = selectedFiles[0];
@@ -1342,7 +1406,6 @@
             }
         }
 
-        // ODT 분할
         async function splitODT() {
             const splitOption = document.querySelector('input[name="odtSplit"]:checked').value;
             const file = selectedFiles[0];
