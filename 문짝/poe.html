@@ -1017,7 +1017,7 @@
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
 
-        // ODT 병합 - 수정된 버전
+        // ODT 병합 - 완전히 재작성된 버전 (이미지 완벽 지원)
         async function mergeODT(outputFileName) {
             const mergeOption = document.querySelector('input[name="odtMerge"]:checked').value;
             
@@ -1026,63 +1026,144 @@
                 
                 const baseZip = new JSZip();
                 let globalImageCounter = 1000;
-                const processedImages = new Map();
+                let globalObjectCounter = 1000;
+                const allImageMappings = [];
+                const allResources = new Map(); // 모든 리소스 경로 추적
                 
                 // 첫 번째 파일을 기본 템플릿으로 사용
                 const firstFile = selectedFiles[0];
                 const firstArrayBuffer = await firstFile.arrayBuffer();
                 const firstZip = await JSZip.loadAsync(firstArrayBuffer);
                 
-                // 기본 파일 구조 복사 (content.xml 제외)
+                // 모든 리소스 파일 복사 (Pictures/, ObjectReplacements/, Object*/ 등)
                 for (const [path, file] of Object.entries(firstZip.files)) {
-                    if (path !== 'content.xml' && !file.dir) {
+                    if (!file.dir && path !== 'content.xml' && path !== 'META-INF/manifest.xml') {
                         const content = await file.async('arraybuffer');
                         baseZip.file(path, content);
-                        if (path.startsWith('Pictures/')) {
-                            processedImages.set(path, path);
-                        }
+                        allResources.set(path, path);
                     }
                 }
                 
-                // content.xml 파싱
-                const baseContentXml = await firstZip.files['content.xml'].async('text');
-                const parser = new DOMParser();
-                const baseDoc = parser.parseFromString(baseContentXml, 'text/xml');
+                // manifest.xml 파싱
+                let manifestDoc = null;
+                let manifestEntries = new Map();
+                if (firstZip.files['META-INF/manifest.xml']) {
+                    const manifestXml = await firstZip.files['META-INF/manifest.xml'].async('text');
+                    manifestDoc = new DOMParser().parseFromString(manifestXml, 'text/xml');
+                    
+                    // 기존 manifest 항목들 저장
+                    const entries = manifestDoc.getElementsByTagName('manifest:file-entry');
+                    for (let entry of entries) {
+                        const fullPath = entry.getAttribute('manifest:full-path');
+                        const mediaType = entry.getAttribute('manifest:media-type');
+                        if (fullPath) {
+                            manifestEntries.set(fullPath, mediaType);
+                        }
+                    }
+                }
                 
                 // 모든 문서의 내용을 저장할 배열
                 const documentFragments = [];
                 
                 // 각 파일 처리
                 for (let fileIndex = 0; fileIndex < selectedFiles.length; fileIndex++) {
+                    console.log(`파일 ${fileIndex + 1} 처리 중:`, selectedFiles[fileIndex].name);
+                    
                     const file = selectedFiles[fileIndex];
                     const arrayBuffer = await file.arrayBuffer();
                     const odtZip = await JSZip.loadAsync(arrayBuffer);
                     
-                    // 이미지 파일 처리
-                    const localImageMap = new Map();
+                    // 이미지 및 오브젝트 매핑
+                    const localResourceMap = new Map();
+                    
+                    // 모든 리소스 파일 처리 (Pictures/, ObjectReplacements/, Object*/ 등)
                     for (const [path, zipFile] of Object.entries(odtZip.files)) {
-                        if (path.startsWith('Pictures/') && !zipFile.dir) {
+                        if (!zipFile.dir && (
+                            path.startsWith('Pictures/') || 
+                            path.startsWith('ObjectReplacements/') ||
+                            path.match(/^Object \d+\//) ||
+                            path.startsWith('media/')
+                        )) {
                             let newPath = path;
-                            if (fileIndex > 0 && !processedImages.has(path)) {
+                            
+                            // 첫 번째 파일이 아니고 리소스가 아직 추가되지 않은 경우
+                            if (fileIndex > 0 || !allResources.has(path)) {
                                 const content = await zipFile.async('arraybuffer');
-                                const ext = path.split('.').pop();
-                                newPath = `Pictures/img_${globalImageCounter++}.${ext}`;
+                                
+                                // 경로 충돌 처리
+                                if (allResources.has(path)) {
+                                    // 새로운 경로 생성
+                                    if (path.startsWith('Pictures/')) {
+                                        const ext = path.split('.').pop();
+                                        newPath = `Pictures/img_${globalImageCounter++}.${ext}`;
+                                    } else if (path.startsWith('ObjectReplacements/')) {
+                                        newPath = `ObjectReplacements/obj_${globalObjectCounter++}`;
+                                    } else if (path.match(/^Object \d+\//)) {
+                                        const subPath = path.substring(path.indexOf('/') + 1);
+                                        newPath = `Object ${globalObjectCounter++}/${subPath}`;
+                                    } else if (path.startsWith('media/')) {
+                                        const ext = path.split('.').pop();
+                                        newPath = `media/media_${globalObjectCounter++}.${ext}`;
+                                    }
+                                }
+                                
+                                // 리소스 저장
                                 baseZip.file(newPath, content);
-                                processedImages.set(path, newPath);
-                            } else if (processedImages.has(path) && fileIndex > 0) {
-                                newPath = processedImages.get(path);
+                                allResources.set(newPath, newPath);
+                                
+                                // manifest에 추가
+                                if (!manifestEntries.has(newPath)) {
+                                    const mediaType = getMediaType(newPath);
+                                    manifestEntries.set(newPath, mediaType);
+                                }
                             }
-                            localImageMap.set(path, newPath);
+                            
+                            localResourceMap.set(path, newPath);
                         }
                     }
                     
+                    // Object 폴더 전체 처리 (하위 폴더 포함)
+                    const objectFolders = new Set();
+                    for (const path of Object.keys(odtZip.files)) {
+                        const match = path.match(/^(Object \d+)\//);
+                        if (match) {
+                            objectFolders.add(match[1]);
+                        }
+                    }
+                    
+                    for (const objFolder of objectFolders) {
+                        const newObjFolder = fileIndex > 0 ? `Object ${globalObjectCounter++}` : objFolder;
+                        
+                        for (const [path, zipFile] of Object.entries(odtZip.files)) {
+                            if (path.startsWith(objFolder + '/') && !zipFile.dir) {
+                                const subPath = path.substring(objFolder.length + 1);
+                                const newPath = `${newObjFolder}/${subPath}`;
+                                
+                                if (!allResources.has(newPath)) {
+                                    const content = await zipFile.async('arraybuffer');
+                                    baseZip.file(newPath, content);
+                                    allResources.set(newPath, newPath);
+                                    
+                                    if (!manifestEntries.has(newPath)) {
+                                        const mediaType = getMediaType(newPath);
+                                        manifestEntries.set(newPath, mediaType);
+                                    }
+                                }
+                                
+                                localResourceMap.set(path, newPath);
+                            }
+                        }
+                    }
+                    
+                    allImageMappings.push(localResourceMap);
+                    
                     // content.xml 파싱
                     const contentXml = await odtZip.files['content.xml'].async('text');
-                    const contentDoc = parser.parseFromString(contentXml, 'text/xml');
+                    const contentDoc = new DOMParser().parseFromString(contentXml, 'text/xml');
                     
                     // 스타일 추출 및 이름 변경
                     const styleMapping = new Map();
-                    const suffix = `_doc${fileIndex + 1}`;
+                    const suffix = fileIndex === 0 ? '' : `_doc${fileIndex + 1}`;
                     
                     const autoStyles = contentDoc.getElementsByTagName('office:automatic-styles')[0];
                     const modifiedStyles = [];
@@ -1095,22 +1176,32 @@
                                 const newStyleName = styleName + suffix;
                                 styleMapping.set(styleName, newStyleName);
                                 
-                                // 스타일 복사 및 이름 변경
-                                const newStyle = style.cloneNode(true);
-                                newStyle.setAttribute('style:name', newStyleName);
+                                // 스타일 HTML 가져오기
+                                let styleHtml = style.outerHTML;
                                 
-                                // 부모 스타일 참조 업데이트
-                                const parentStyle = newStyle.getAttribute('style:parent-style-name');
-                                if (parentStyle && !parentStyle.includes('_doc')) {
-                                    newStyle.setAttribute('style:parent-style-name', parentStyle + suffix);
+                                // 스타일 이름 변경
+                                if (suffix) {
+                                    styleHtml = styleHtml.replace(
+                                        `style:name="${escapeRegExp(styleName)}"`,
+                                        `style:name="${newStyleName}"`
+                                    );
+                                    
+                                    // 부모 스타일 참조 업데이트
+                                    const parentStyle = style.getAttribute('style:parent-style-name');
+                                    if (parentStyle) {
+                                        styleHtml = styleHtml.replace(
+                                            `style:parent-style-name="${escapeRegExp(parentStyle)}"`,
+                                            `style:parent-style-name="${parentStyle}${suffix}"`
+                                        );
+                                    }
                                 }
                                 
-                                modifiedStyles.push(newStyle.outerHTML);
+                                modifiedStyles.push(styleHtml);
                             }
                         }
                     }
                     
-                    // 텍스트 콘텐츠 추출 및 스타일/이미지 참조 업데이트
+                    // 텍스트 콘텐츠 추출 및 참조 업데이트
                     const body = contentDoc.getElementsByTagName('office:body')[0];
                     const text = body?.getElementsByTagName('office:text')[0];
                     const modifiedContent = [];
@@ -1120,36 +1211,47 @@
                         for (const child of children) {
                             let elementHtml = child.outerHTML;
                             
-                            // 스타일 참조 업데이트 - 정규표현식 특수문자 이스케이프
-                            for (const [oldStyle, newStyle] of styleMapping) {
-                                const escapedOldStyle = escapeRegExp(oldStyle);
-                                
-                                // 각 속성별로 개별적으로 처리
-                                elementHtml = elementHtml.replace(
-                                    new RegExp(`text:style-name="${escapedOldStyle}"`, 'g'),
-                                    `text:style-name="${newStyle}"`
-                                );
-                                elementHtml = elementHtml.replace(
-                                    new RegExp(`table:style-name="${escapedOldStyle}"`, 'g'),
-                                    `table:style-name="${newStyle}"`
-                                );
-                                elementHtml = elementHtml.replace(
-                                    new RegExp(`draw:style-name="${escapedOldStyle}"`, 'g'),
-                                    `draw:style-name="${newStyle}"`
-                                );
-                                elementHtml = elementHtml.replace(
-                                    new RegExp(`style:name="${escapedOldStyle}"`, 'g'),
-                                    `style:name="${newStyle}"`
-                                );
+                            // 스타일 참조 업데이트
+                            if (suffix) {
+                                for (const [oldStyle, newStyle] of styleMapping) {
+                                    const escapedOldStyle = escapeRegExp(oldStyle);
+                                    
+                                    // 모든 스타일 관련 속성 업데이트
+                                    const styleAttrs = [
+                                        'text:style-name',
+                                        'table:style-name',
+                                        'draw:style-name',
+                                        'draw:text-style-name',
+                                        'presentation:style-name',
+                                        'chart:style-name',
+                                        'style:data-style-name',
+                                        'style:page-layout-name',
+                                        'text:list-style-name'
+                                    ];
+                                    
+                                    for (const attr of styleAttrs) {
+                                        elementHtml = elementHtml.replace(
+                                            new RegExp(`${attr}="${escapedOldStyle}"`, 'g'),
+                                            `${attr}="${newStyle}"`
+                                        );
+                                    }
+                                }
                             }
                             
-                            // 이미지 경로 업데이트
-                            for (const [oldPath, newPath] of localImageMap) {
-                                const escapedOldPath = escapeRegExp(oldPath);
-                                elementHtml = elementHtml.replace(
-                                    new RegExp(`xlink:href="${escapedOldPath}"`, 'g'),
-                                    `xlink:href="${newPath}"`
-                                );
+                            // 리소스 경로 업데이트
+                            for (const [oldPath, newPath] of localResourceMap) {
+                                if (oldPath !== newPath) {
+                                    const escapedOldPath = escapeRegExp(oldPath);
+                                    elementHtml = elementHtml.replace(
+                                        new RegExp(`xlink:href="${escapedOldPath}"`, 'g'),
+                                        `xlink:href="${newPath}"`
+                                    );
+                                    // ./ 형식의 경로도 처리
+                                    elementHtml = elementHtml.replace(
+                                        new RegExp(`xlink:href="\\./${escapedOldPath}"`, 'g'),
+                                        `xlink:href="./${newPath}"`
+                                    );
+                                }
                             }
                             
                             modifiedContent.push(elementHtml);
@@ -1186,6 +1288,7 @@
     xmlns:dc="http://purl.org/dc/elements/1.1/" 
     xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" 
     xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0" 
+    xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0"
     xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" 
     xmlns:chart="urn:oasis:names:tc:opendocument:xmlns:chart:1.0" 
     xmlns:dr3d="urn:oasis:names:tc:opendocument:xmlns:dr3d:1.0" 
@@ -1196,11 +1299,20 @@
     xmlns:ooow="http://openoffice.org/2004/writer" 
     xmlns:oooc="http://openoffice.org/2004/calc" 
     xmlns:dom="http://www.w3.org/2001/xml-events" 
+    xmlns:xforms="http://www.w3.org/2002/xforms" 
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+    xmlns:rpt="http://openoffice.org/2005/report" 
+    xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2" 
+    xmlns:xhtml="http://www.w3.org/1999/xhtml" 
+    xmlns:grddl="http://www.w3.org/2003/g/data-view#" 
+    xmlns:tableooo="http://openoffice.org/2009/table" 
+    xmlns:field="urn:openoffice:names:experimental:ooo-ms-interop:xmlns:field:1.0"
     office:version="1.2">
     <office:scripts/>
     <office:font-face-decls>`;
                 
-                // 모든 폰트 선언 병합 (중복 제거)
+                // 모든 폰트 선언 병합
                 const allFonts = new Set();
                 for (const fragment of documentFragments) {
                     fragment.fonts.forEach(font => allFonts.add(font));
@@ -1243,7 +1355,7 @@
                     }
                     
                     // 섹션으로 감싸기
-                    if (mergeOption === 'section') {
+                    if (mergeOption === 'section' && documentFragments.length > 1) {
                         newContentXml += `\n            <text:section text:name="Section${i + 1}">`;
                         for (const element of fragment.content) {
                             newContentXml += '\n                ' + element;
@@ -1265,7 +1377,29 @@
                 // 새 content.xml 저장
                 baseZip.file('content.xml', newContentXml);
                 
+                // manifest.xml 업데이트
+                if (manifestDoc) {
+                    const manifestRoot = manifestDoc.getElementsByTagName('manifest:manifest')[0];
+                    
+                    // 기존 항목 모두 제거
+                    while (manifestRoot.firstChild) {
+                        manifestRoot.removeChild(manifestRoot.firstChild);
+                    }
+                    
+                    // 새 항목 추가
+                    for (const [path, mediaType] of manifestEntries) {
+                        const entry = manifestDoc.createElement('manifest:file-entry');
+                        entry.setAttribute('manifest:full-path', path);
+                        entry.setAttribute('manifest:media-type', mediaType || 'application/octet-stream');
+                        manifestRoot.appendChild(entry);
+                    }
+                    
+                    const newManifestXml = new XMLSerializer().serializeToString(manifestDoc);
+                    baseZip.file('META-INF/manifest.xml', newManifestXml);
+                }
+                
                 // ZIP 생성 및 다운로드
+                console.log('ODT 병합 완료. ZIP 파일 생성 중...');
                 const content = await baseZip.generateAsync({ 
                     type: 'blob', 
                     compression: 'DEFLATE',
@@ -1273,12 +1407,43 @@
                 });
                 
                 downloadFile(content, outputFileName + '.odt');
-                console.log('ODT 병합 완료');
+                console.log('ODT 병합 파일 다운로드 완료');
                 
             } catch (error) {
                 console.error('ODT 병합 오류:', error);
                 alert('ODT 파일 병합 중 오류가 발생했습니다: ' + error.message);
             }
+        }
+        
+        // MIME 타입 추론 함수
+        function getMediaType(path) {
+            const ext = path.split('.').pop().toLowerCase();
+            const mimeTypes = {
+                'png': 'image/png',
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'gif': 'image/gif',
+                'svg': 'image/svg+xml',
+                'bmp': 'image/bmp',
+                'tiff': 'image/tiff',
+                'xml': 'text/xml',
+                'txt': 'text/plain',
+                'odf': 'application/vnd.oasis.opendocument.formula',
+                'svm': 'image/x-svm',
+                'wmf': 'image/x-wmf',
+                'emf': 'image/x-emf'
+            };
+            
+            if (path.endsWith('/')) return 'application/vnd.oasis.opendocument.text';
+            if (path === 'content.xml') return 'text/xml';
+            if (path === 'styles.xml') return 'text/xml';
+            if (path === 'meta.xml') return 'text/xml';
+            if (path === 'settings.xml') return 'text/xml';
+            if (path === 'manifest.rdf') return 'application/rdf+xml';
+            if (path.startsWith('ObjectReplacements/')) return 'application/x-openoffice-gdimetafile';
+            if (path.includes('/content.xml')) return 'text/xml';
+            
+            return mimeTypes[ext] || 'application/octet-stream';
         }
 
         // 파일 분할 함수들
