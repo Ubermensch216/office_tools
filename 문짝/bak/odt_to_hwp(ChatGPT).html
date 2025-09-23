@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ODT → HWPX 일괄 변환기 (Client-only, Single HTML)</title>
+<style>
+  :root {
+    --bg:#0b1020; --panel:#151a2c; --panel-2:#1e2440; --text:#eef1ff; --muted:#9aa3c7;
+    --accent:#5da0ff; --accent-2:#41d6c3; --danger:#ff5d7a; --warn:#ffcc66; --ok:#69db7c;
+  }
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Malgun Gothic,sans-serif}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px}
+  header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+  h1{font-size:18px;margin:0}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--panel-2);color:var(--text);border:1px solid #2a335a;border-radius:10px;padding:9px 12px;cursor:pointer}
+  button.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));border:none}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .grid{display:grid;grid-template-columns:1fr 360px;gap:16px;margin-top:16px}
+  .left,.right{background:var(--panel);border:1px solid #232a4a;border-radius:14px;padding:16px}
+  .drop{border:2px dashed #35406f;border-radius:12px;padding:24px;text-align:center;color:var(--muted)}
+  .drop.drag{border-color:var(--accent);color:var(--text)}
+  .file-input{display:none}
+  .list{margin-top:16px}
+  .row{display:grid;grid-template-columns:1fr 90px 110px 32px;gap:10px;align-items:center;padding:10px;border-radius:10px;background:var(--panel-2);border:1px solid #29315a;margin-bottom:8px}
+  .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .badge{font-size:12px;padding:3px 8px;border-radius:999px;border:1px solid #3a4270;color:var(--muted);text-align:center}
+  .badge.ok{color:#0d1; border-color:#2b6}
+  .badge.err{color:var(--danger); border-color:#8b4155}
+  .badge.warn{color:var(--warn); border-color:#8b6e41}
+  .row .actions button{padding:6px 8px;font-size:12px}
+  .progress{height:8px;background:#1b2346;border-radius:999px;overflow:hidden}
+  .progress > span{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0%}
+  .sr{position:absolute;left:-9999px}
+  .logs{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#0f1430;border:1px solid #273067;border-radius:10px;padding:10px;color:#cdd6ff;max-height:280px;overflow:auto;white-space:pre-wrap}
+  .pill{display:inline-flex;gap:6px;align-items:center;background:#111735;border:1px solid #28305b;color:#aeb8e8;border-radius:999px;padding:6px 10px;font-size:12px}
+  .kvs{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin-top:10px}
+  .kvs dt{color:var(--muted)}
+  .kvs dd{margin:0}
+  .footer{margin-top:18px;color:#8fa1ff;font-size:12px}
+  a.link{color:#9bd1ff;text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 aria-label="ODT to HWPX batch converter">ODT → HWPX 배치 변환기</h1>
+    <div class="toolbar" role="toolbar" aria-label="작업 도구">
+      <button id="btnPick" aria-label="파일 선택">파일 선택</button>
+      <button id="btnConvert" class="primary" aria-label="변환 시작">변환</button>
+      <button id="btnZipAll" aria-label="모두 ZIP 다운로드" disabled>모두 ZIP</button>
+      <button id="btnLoadSamples" aria-label="샘플 ODT 불러오기">샘플 ODT 불러오기</button>
+      <button id="btnDownloadDiag" aria-label="진단 로그 다운로드" disabled>진단 로그</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="left" aria-labelledby="dropLabel">
+      <div id="drop" class="drop" tabindex="0" role="button" aria-describedby="dropHelp">
+        <div id="dropLabel">여기에 파일 드래그 & 드롭</div>
+        <div id="dropHelp">ODT 여러 개 가능 • 키보드: 스페이스 또는 엔터로 파일 선택</div>
+        <input id="file" type="file" class="file-input" accept=".odt" multiple aria-label="ODT 파일 선택" />
+      </div>
+
+      <div class="list" role="list" aria-label="파일 목록" id="fileList"></div>
+
+      <div class="kvs">
+        <dt>전체 진행률</dt><dd><div class="progress" aria-label="전체 진행률" aria-valuemin="0" aria-valuemax="100" aria-live="polite"><span id="totalProg"></span></div></dd>
+        <dt>큐 병렬</dt><dd><span id="concurrency" class="pill" title="동시 변환 수">2</span></dd>
+      </div>
+      <div class="footer">클라이언트 전용 • 오프라인 동작 • 브라우저 지원: 최신 크롬/엣지/사파리/파이어폭스</div>
+    </section>
+
+    <aside class="right" aria-labelledby="resultLabel">
+      <h2 id="resultLabel" style="margin:4px 0 10px">결과 및 경고</h2>
+      <div id="warnings" class="kvs" aria-live="polite"></div>
+      <h3 style="margin:14px 0 8px">진단 로그</h3>
+      <div id="logs" class="logs" aria-live="polite" aria-atomic="false"></div>
+    </aside>
+  </div>
+</div>
+
+<script>
+/** 국제화: 필요 키만 정의. ko 기본 */
+const i18n = {
+  ko: {
+    pick: "파일 선택",
+    convert: "변환",
+    zipAll: "모두 ZIP",
+    sample: "샘플 ODT 불러오기",
+    logs: "진단 로그",
+    status: {
+      queued: "대기",
+      reading: "읽는 중",
+      parsing: "파싱",
+      mapping: "매핑",
+      building: "패키징",
+      done: "완료",
+      error: "오류"
+    },
+    warnUnsupported: "지원하지 않는 요소"
+  }
+};
+const t = i18n.ko;
+
+/** 간단 로거 */
+const diag = {
+  lines: [],
+  /** @param {...any} a */
+  log(...a){ const s = a.map(v => typeof v==='string'? v : JSON.stringify(v)).join(' '); this.lines.push(`[${new Date().toISOString()}] ${s}`); renderLogs(); },
+  blob(){ return new Blob([this.lines.join('\n')], {type:'text/plain'}); }
+};
+
+/** 접근성: Space/Enter 키로 클릭 동작 부여 */
+function makeKeyClickable(el){ el.addEventListener('keydown', e=>{ if(e.key===' '||e.key==='Enter'){ e.preventDefault(); el.click(); } }); }
+
+/** 파일 상태 모델 */
+const state = {
+  files: /** @type {Array<{
+    id:string,name:string,size:number,file:File,status:string,progress:number, result?:Blob, hwpxName?:string, warnings:string[], error?:string
+  }>} */([]),
+  concurrency: 2,
+  running: 0,
+  queue: [],
+  workerURL: null,
+};
+
+const $ = sel => document.querySelector(sel);
+const listEl = $('#fileList');
+const totalProgEl = $('#totalProg');
+const warnEl = $('#warnings');
+const logsEl = $('#logs');
+
+function renderLogs(){ logsEl.textContent = diag.lines.slice(-1000).join('\n'); }
+
+/** 목록 렌더링 */
+function renderList(){
+  listEl.innerHTML = '';
+  state.files.forEach(item=>{
+    const row = document.createElement('div');
+    row.className = 'row'; row.setAttribute('role','listitem');
+    const name = document.createElement('div'); name.className='name'; name.textContent = item.name;
+    const size = document.createElement('div'); size.className='badge'; size.textContent = humanSize(item.size);
+    const status = document.createElement('div'); status.className='badge '+(item.status==='완료'?'ok': item.status==='오류'?'err': (item.warnings?.length?'warn':'')); status.textContent = item.status;
+    const actions = document.createElement('div'); actions.className='actions'; actions.style.display='flex'; actions.style.gap='6px';
+    const btnDl = document.createElement('button'); btnDl.textContent='다운'; btnDl.disabled = !item.result;
+    btnDl.addEventListener('click', ()=>{ if(item.result){ saveAs(item.result, item.hwpxName || (item.name.replace(/\.odt$/i,'')+'.hwpx')); }});
+    actions.appendChild(btnDl);
+    row.appendChild(name); row.appendChild(size); row.appendChild(status); row.appendChild(actions);
+
+    const prog = document.createElement('div'); prog.className='progress'; prog.setAttribute('aria-label', `${item.name} 진행률`);
+    const bar = document.createElement('span'); bar.style.width = (item.progress||0)+'%'; prog.appendChild(bar);
+    row.appendChild(prog);
+    listEl.appendChild(row);
+  });
+  renderTotalProgress();
+  $('#btnZipAll').disabled = !state.files.some(f=>f.result);
+}
+function renderWarnings(){
+  warnEl.innerHTML = '';
+  let count=0;
+  state.files.forEach(f=>{
+    (f.warnings||[]).forEach(w=>{
+      const dt = document.createElement('dt'); dt.textContent = f.name;
+      const dd = document.createElement('dd'); dd.textContent = w;
+      warnEl.appendChild(dt); warnEl.appendChild(dd);
+      count++;
+    })
+  });
+  if(count===0){ const dd=document.createElement('dd'); dd.textContent='경고 없음'; warnEl.appendChild(dd); }
+}
+function renderTotalProgress(){
+  const n = state.files.length;
+  if(!n){ totalProgEl.style.width='0%'; return; }
+  const sum = state.files.reduce((a,b)=>a+(b.progress||0),0);
+  const pct = Math.round(sum/Math.max(1,n));
+  totalProgEl.style.width = pct+'%';
+}
+function humanSize(bytes){
+  const units=['B','KB','MB','GB']; let i=0; let n=bytes;
+  while(n>=1024 && i<units.length-1){ n/=1024; i++; }
+  return `${n.toFixed(1)} ${units[i]}`;
+}
+/** 파일 저장 */
+function saveAs(blob, name){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+
+/** 큐 제어 */
+function enqueue(fileItem){ state.queue.push(fileItem); processQueue(); }
+function processQueue(){ while(state.running < state.concurrency && state.queue.length){ const item = state.queue.shift(); runWorker(item); } }
+
+/** Worker 코드 문자열 생성 */
+function getWorkerURL(){
+  if(state.workerURL) return state.workerURL;
+  const workerSrc = `
+    /* ====== zip utils (mini) ======
+       제공: strToU8/u8ToStr/crc32/zipSync. unzip은 별도 구현(unzipToMapAsync). */
+    ${zipMiniCore()}
+    const textDecoder = new TextDecoder('utf-8'); const textEncoder = new TextEncoder();
+
+    /** 파일 배열을 ZIP(Store) Blob으로 패키징 */
+    function zipPack(files){
+      const obj = {}; for(const f of files){ obj[f.name] = f.bin; }
+      return new Blob([zipSync(obj, {level: 0})]);
+    }
+
+    /** Bytes → Map<string, Uint8Array> (Deflate 지원, 비동기) */
+    async function unzipToMapAsync(buf){
+      const a = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+      const readU16 = (p)=> a[p] | (a[p+1]<<8);
+      const readU32 = (p)=> (a[p] | (a[p+1]<<8) | (a[p+2]<<16) | (a[p+3]<<24))>>>0;
+
+      // EOCD 탐색
+      let off = a.length - 22;
+      for(; off >= 0 && !(a[off]===0x50 && a[off+1]===0x4b && a[off+2]===0x05 && a[off+3]===0x06); off--){}
+      if(off < 0) throw new Error('ZIP EOCD not found');
+
+      const cdirOff = readU32(off+16), total = readU16(off+10);
+      let o = cdirOff; const entries = [];
+      for(let i=0;i<total;i++){
+        if(!(a[o]===0x50&&a[o+1]===0x4b&&a[o+2]===0x01&&a[o+3]===0x02)) throw new Error('Bad CEN');
+        const method = readU16(o+10), csize=readU32(o+20), usize=readU32(o+24);
+        const nlen=readU16(o+28), elen=readU16(o+30), clen=readU16(o+32);
+        const name=u8ToStr(a.subarray(o+46,o+46+nlen));
+        const lhoff=readU32(o+42);
+
+        // LFH
+        let p=lhoff;
+        if(!(a[p]===0x50&&a[p+1]===0x4b&&a[p+2]===0x03&&a[p+3]===0x04)) throw new Error('Bad LFH');
+        const nlen2=readU16(p+26), elen2=readU16(p+28);
+        const dataOff=p+30+nlen2+elen2;
+        const compData=a.subarray(dataOff, dataOff+csize);
+
+        entries.push({name, method, compData, usize});
+        o += 46+nlen+elen+clen;
+      }
+
+      const out = new Map();
+      for(const e of entries){
+        if(e.method===0){ out.set(e.name, e.compData); continue; }
+        if(e.method===8){
+          if(typeof DecompressionStream==='undefined'){ throw new Error('Deflate not supported in this browser'); }
+          const ds = new DecompressionStream('deflate-raw');
+          const ab = await new Response(new Blob([e.compData]).stream().pipeThrough(ds)).arrayBuffer();
+          out.set(e.name, new Uint8Array(ab)); continue;
+        }
+        throw new Error('Unsupported ZIP method '+e.method);
+      }
+      return out;
+    }
+
+    /** XML 조립 */
+    function xml(strings,...vals){ let s=''; for(let i=0;i<strings.length;i++){ s+=strings[i]+(vals[i]??''); } return s; }
+
+    /** HWPX 최소 패키지 생성 */
+    function buildHwpxPackage(docTitle, sectionXml){
+      const now = new Date().toISOString();
+      const files = [];
+      const contentTypes = \`<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/Contents/document.xml" ContentType="application/vnd.hancom.hwpx+xml"/>
+  <Override PartName="/Contents/section0.xml" ContentType="application/vnd.hancom.hwpx+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>\`;
+      files.push({name:'[Content_Types].xml', bin:strToU8(contentTypes)});
+
+      const rels = \`<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://www.hancom.co.kr/hwpml/2011/relationships/contents" Target="/Contents/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="/docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="/docProps/app.xml"/>
+</Relationships>\`;
+      files.push({name:'_rels/.rels', bin:strToU8(rels)});
+
+      const core = \`<?xml version="1.0" encoding="UTF-8"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+  xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"
+  xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>\${escapeXml(docTitle||'문서')}</dc:title>
+  <dc:creator>Client Converter</dc:creator>
+  <cp:lastModifiedBy>Client Converter</cp:lastModifiedBy>
+  <dcterms:created xsi:type="dcterms:W3CDTF">\${now}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">\${now}</dcterms:modified>
+</cp:coreProperties>\`;
+      files.push({name:'docProps/core.xml', bin:strToU8(core)});
+
+      const app = \`<?xml version="1.0" encoding="UTF-8"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Client Converter</Application>
+  <DocSecurity>0</DocSecurity>
+  <Company></Company>
+</Properties>\`;
+      files.push({name:'docProps/app.xml', bin:strToU8(app)});
+
+      const document = \`<?xml version="1.0" encoding="UTF-8"?>
+<hwpx:hwpx xmlns:hwpx="http://www.hancom.co.kr/hwpml/2011/packaging"
+  xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"
+  xmlns:hs="http://www.hancom.co.kr/hwpml/2011/setting"
+  xmlns:hc="http://www.hancom.co.kr/hwpml/2011/common"
+  xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app">
+  <hwpx:head><hwpx:refList/></hwpx:head>
+  <hwpx:body><hwpx:sectionRef idref="section_0"/></hwpx:body>
+</hwpx:hwpx>\`;
+      files.push({name:'Contents/document.xml', bin:strToU8(document)});
+
+      files.push({name:'Contents/section0.xml', bin:strToU8(sectionXml)});
+      return zipPack(files);
+    }
+
+    function escapeXml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    /** ODT content.xml → HWPX section0.xml: 문단/런 최소 매핑 */
+    function mapOdfToHwpx(contentXml){
+      const doc = new DOMParser().parseFromString(contentXml, 'application/xml');
+      const ps = Array.from(doc.getElementsByTagNameNS('*','p'));
+      const open = \`<?xml version="1.0" encoding="UTF-8"?>
+<hp:section xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"
+  xmlns:hc="http://www.hancom.co.kr/hwpml/2011/common"
+  xmlns:hs="http://www.hancom.co.kr/hwpml/2011/setting" id="section_0">
+  <hp:paraHead/><hp:paraList>\`;
+      const items = [];
+      const warns = [];
+
+      for(const p of ps){
+        const parts = [];
+        function walk(node){
+          if(node.nodeType===3){
+            const text = node.nodeValue || '';
+            if(text.trim().length){ parts.push(\`<hp:run><hp:t>\${escapeXml(text)}</hp:t></hp:run>\`); }
+            else { parts.push(\`<hp:run><hp:t> </hp:t></hp:run>\`); }
+          } else if(node.nodeType===1){
+            const tag = node.localName;
+            if(tag==='span'){
+              const style = (node.getAttribute('text:style-name')||'').toLowerCase();
+              const bold = style.includes('bold');
+              const italic = style.includes('italic');
+              const inner = Array.from(node.childNodes);
+              parts.push('<hp:run>');
+              if(bold) parts.push('<hp:charPr bold="1"/>');
+              if(italic) parts.push('<hp:charPr italic="1"/>');
+              inner.forEach(walk);
+              parts.push('</hp:run>');
+            } else if(tag==='s'){
+              const count = parseInt(node.getAttribute('text:c')||'1',10);
+              parts.push(\`<hp:run><hp:t>\${' '.repeat(Math.max(1,count))}</hp:t></hp:run>\`);
+            } else {
+              Array.from(node.childNodes).forEach(walk);
+              if(['tab','line-break'].includes(tag)) parts.push('<hp:run><hp:break/></hp:run>');
+              if(['a','note','ruby','frame'].includes(tag)) warns.push('인라인 요소 단순화: '+tag);
+            }
+          }
+        }
+        Array.from(p.childNodes).forEach(walk);
+        items.push(\`<hp:p>\${parts.join('')}</hp:p>\`);
+      }
+
+      const close = '</hp:paraList></hp:section>';
+      return { sectionXml: open + items.join('') + close, warnings: Array.from(new Set(warns)) };
+    }
+
+    /** 메시지 핸들러 */
+    self.onmessage = async (ev)=>{
+      const { id, fileBuf, name } = ev.data;
+      try{
+        self.postMessage({ id, type:'status', status: 'reading', progress:10 });
+        const zipMap = await unzipToMapAsync(fileBuf);
+
+        let xmlU8 = null;
+        if(zipMap.has('content.xml')) xmlU8 = zipMap.get('content.xml');
+        else if(zipMap.has('Content.xml')) xmlU8 = zipMap.get('Content.xml');
+        else {
+          for(const k of zipMap.keys()){ if(k.toLowerCase()==='content.xml'){ xmlU8 = zipMap.get(k); break; } }
+        }
+        if(!xmlU8) throw new Error('content.xml 없음');
+
+        self.postMessage({ id, type:'status', status: 'parsing', progress:30 });
+        const contentXml = u8ToStr(xmlU8);
+
+        self.postMessage({ id, type:'status', status: 'mapping', progress:55 });
+        const { sectionXml, warnings } = mapOdfToHwpx(contentXml);
+
+        self.postMessage({ id, type:'status', status: 'building', progress:80 });
+        const hwpxBlob = buildHwpxPackage(name.replace(/\\.odt$/i,''), sectionXml);
+
+        self.postMessage({ id, type:'done', progress:100, warnings, blob: hwpxBlob });
+      }catch(err){
+        self.postMessage({ id, type:'error', message: String(err&&err.message||err) });
+      }
+    };
+
+    /** ===== zip mini core: str/u8/crc32/zipSync ===== */
+    function zipMiniCore(){ return ''; }
+  `;
+
+  // zipMiniCore() 본문을 바인딩
+  const mini = zipMiniCoreSource();
+  const finalWorkerSrc = workerSrc.replace("function zipMiniCore(){ return ''; }", `function zipMiniCore(){ return \`${mini}\`; }`);
+
+  const url = URL.createObjectURL(new Blob([finalWorkerSrc], {type:'application/javascript'}));
+  state.workerURL = url;
+  return url;
+}
+
+/** zip mini core 소스(문자열) */
+function zipMiniCoreSource(){
+  return `
+var ch2=String.fromCharCode;
+function strToU8(s){var l=s.length,arr=new Uint8Array(l*3),o=0,c;for(var i=0;i<l;i++){c=s.charCodeAt(i);if(c<128){arr[o++]=c;}else if(c<2048){arr[o++]=192|(c>>6);arr[o++]=128|(c&63);}else{arr[o++]=224|(c>>12);arr[o++]=128|((c>>6)&63);arr[o++]=128|(c&63);}}return arr.subarray(0,o)}
+function u8ToStr(a){var s="",i=0;for(;i<a.length;){var c=a[i++];if(c<128){s+=ch2(c);continue}var c2=a[i++]&63;if((c&224)==192){s+=ch2(((c&31)<<6)|c2);continue}var c3=a[i++]&63;s+=ch2(((c&15)<<12)|(c2<<6)|c3)}return s}
+function crc32(buf){var t=typeof Uint32Array!='undefined'?new Uint32Array(256):Array(256);if(!crc32.table){for(var i=0;i<256;i++){var c=i;for(var k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[i]=c>>>0}crc32.table=t}else t=crc32.table;var c=-1>>>0;for(var j=0;j<buf.length;j++)c=t[(c^buf[j])&255]^(c>>>8);return (c^(-1>>>0))>>>0}
+function zipSync(obj,opt){
+  const names = Object.keys(obj);
+  const files=[]; const cdir=[]; let offset=0;
+  const te = new TextEncoder();
+  function _strToU8(s){return te.encode(s)}
+  function _crc32(buf){var t=_crc32.t||(_crc32.t=(function(){var T=new Uint32Array(256);for(let i=0;i<256;i++){let c=i;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;T[i]=c>>>0}return T})()); let c=-1>>>0; for(let j=0;j<buf.length;j++) c=t[(c^buf[j])&255]^(c>>>8); return (c^(-1>>>0))>>>0;}
+  for(const name of names){
+    const data = obj[name]; const comp=0; const cdata=data;
+    const crc=_crc32(data); const usize=data.length; const csize=cdata.length;
+    const nU8=_strToU8(name);
+    const lfh=new Uint8Array(30 + nU8.length);
+    lfh.set([0x50,0x4b,0x03,0x04, 20,0, 0,0, 0,0, 0,0,0,0,
+      crc&255,(crc>>8)&255,(crc>>16)&255,(crc>>24)&255,
+      csize&255,(csize>>8)&255,(csize>>16)&255,(csize>>24)&255,
+      usize&255,(usize>>8)&255,(usize>>16)&255,(usize>>24)&255,
+      nU8.length&255,(nU8.length>>8)&255, 0,0]);
+    lfh.set(nU8,30);
+    files.push(lfh, cdata); const lhoffset=offset; offset+=lfh.length + cdata.length;
+    const cen=new Uint8Array(46 + nU8.length);
+    cen.set([0x50,0x4b,0x01,0x02, 20,0, 20,0, 0,0, 0,0, 0,0,0,0,
+      crc&255,(crc>>8)&255,(crc>>16)&255,(crc>>24)&255,
+      csize&255,(csize>>8)&255,(csize>>16)&255,(csize>>24)&255,
+      usize&255,(usize>>8)&255,(usize>>16)&255,(usize>>24)&255,
+      nU8.length&255,(nU8.length>>8)&255, 0,0, 0,0, 0,0, 0,0,
+      lhoffset&255,(lhoffset>>8)&255,(lhoffset>>16)&255,(lhoffset>>24)&255]);
+    cen.set(nU8,46);
+    cdir.push(cen);
+  }
+  const cdirStart=offset;
+  for(const cen of cdir){ files.push(cen); offset+=cen.length; }
+  const count=names.length;
+  const eocd=new Uint8Array(22);
+  eocd.set([0x50,0x4b,0x05,0x06, 0,0, 0,0,
+    count&255,(count>>8)&255, count&255,(count>>8)&255,
+    (offset-cdirStart)&255,((offset-cdirStart)>>8)&255,((offset-cdirStart)>>16)&255,((offset-cdirStart)>>24)&255,
+    cdirStart&255,(cdirStart>>8)&255,(cdirStart>>16)&255,(cdirStart>>24)&255, 0,0]);
+  files.push(eocd);
+  let totalLen=0; for(const f of files) totalLen+=f.length;
+  const out=new Uint8Array(totalLen); let pos=0;
+  for(const f of files){ out.set(f,pos); pos+=f.length; }
+  return out;
+}
+`;
+}
+
+/** 워커 실행 */
+function runWorker(item){
+  state.running++;
+  item.status = t.status.reading; item.progress=5; renderList();
+
+  const worker = new Worker(getWorkerURL());
+  worker.onmessage = async (ev)=>{
+    const { type } = ev.data;
+    if(type==='status'){
+      item.status = t.status[ev.data.status] || ev.data.status;
+      item.progress = ev.data.progress||item.progress;
+      renderList();
+    }else if(type==='done'){
+      item.status = t.status.done; item.progress=100;
+      const blobAny = ev.data.blob;
+      let blob = blobAny instanceof Blob ? blobAny : new Blob([new Uint8Array(blobAny||[])], {type:'application/zip'});
+      item.result = blob; item.hwpxName = item.name.replace(/\.odt$/i,'')+'.hwpx';
+      item.warnings = ev.data.warnings||[];
+      diag.log('완료:', item.name, '경고:', item.warnings.length);
+      renderList(); renderWarnings();
+      worker.terminate();
+      state.running--; processQueue();
+      $('#btnDownloadDiag').disabled = state.files.length===0;
+    }else if(type==='error'){
+      item.status = t.status.error; item.error = ev.data.message; item.progress=100;
+      diag.log('오류:', item.name, ev.data.message);
+      renderList(); renderWarnings();
+      worker.terminate();
+      state.running--; processQueue();
+      $('#btnDownloadDiag').disabled = state.files.length===0;
+    }
+  };
+  worker.onerror = (e)=>{ item.status=t.status.error; item.error=String(e.message||e); diag.log('워커 오류', e.message||e); renderList(); worker.terminate(); state.running--; processQueue(); };
+
+  item.status = t.status.reading; item.progress=10; renderList();
+  item.warnings = []; item.error = undefined;
+
+  item.file.arrayBuffer().then(buf=>{
+    worker.postMessage({ id:item.id, fileBuf: buf, name: item.name }, [buf]);
+  }).catch(err=>{
+    item.status=t.status.error; item.error=String(err); diag.log('읽기 실패', item.name, String(err)); renderList();
+    state.running--; processQueue();
+  });
+}
+
+/** 이벤트 바인딩 */
+const drop = $('#drop'); const fileInput = $('#file');
+makeKeyClickable(drop);
+drop.addEventListener('click', ()=> fileInput.click());
+drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag'); });
+drop.addEventListener('dragleave', ()=> drop.classList.remove('drag'));
+drop.addEventListener('drop', e=>{
+  e.preventDefault(); drop.classList.remove('drag');
+  addFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', ()=> addFiles(fileInput.files));
+
+$('#btnPick').addEventListener('click', ()=> fileInput.click());
+$('#btnConvert').addEventListener('click', ()=>{
+  state.files.forEach(f=>{
+    if(f.status===t.status.queued || f.status===t.status.error){ enqueue(f); }
+  });
+});
+$('#btnZipAll').addEventListener('click', async ()=>{
+  const files = state.files.filter(f=>f.result).map(f=>({name:f.hwpxName|| (f.name.replace(/\.odt$/i,'')+'.hwpx'), blob:f.result}));
+  if(!files.length) return;
+  const zipBlob = await zipBlobs(files);
+  saveAs(zipBlob, 'hwpx_all.zip');
+});
+$('#btnDownloadDiag').addEventListener('click', ()=> saveAs(diag.blob(), 'diagnostics.log'));
+$('#btnLoadSamples').addEventListener('click', async ()=>{
+  const samples = await makeSampleODTs();
+  addFiles(samples);
+});
+
+/** 파일 추가 */
+/**
+ * 파일을 큐에 추가하고 목록을 갱신한다.
+ * @param {FileList|File[]} fileList
+ */
+function addFiles(fileList){
+  const arr = Array.from(fileList||[]).filter(f=>/\.odt$/i.test(f.name));
+  for(const f of arr){
+    const it = { id: crypto.randomUUID(), name:f.name, size:f.size, file:f, status:t.status.queued, progress:0, warnings:[] };
+    state.files.push(it);
+  }
+  renderList(); renderWarnings();
+  $('#btnZipAll').disabled = true;
+  $('#btnDownloadDiag').disabled = state.files.length===0;
+}
+
+/** 여러 Blob → ZIP (store) */
+/**
+ * Blob 배열을 ZIP(Store)로 묶어 반환한다.
+ * @param {{name:string, blob:Blob}[]} files
+ * @returns {Promise<Blob>}
+ */
+async function zipBlobs(files){
+  const entries={};
+  for(const it of files){
+    entries[it.name]= new Uint8Array(await it.blob.arrayBuffer());
+  }
+  const zipped = (function zipSyncLocal(obj){
+    function crc32(buf){var t=zipSyncLocal.t||(zipSyncLocal.t=(function(){var T=new Uint32Array(256);for(let i=0;i<256;i++){let c=i;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;T[i]=c>>>0}return T})()); let c=-1>>>0; for(let j=0;j<buf.length;j++) c=t[(c^buf[j])&255]^(c>>>8); return (c^(-1>>>0))>>>0;}
+    const te=new TextEncoder(); function strToU8(s){return te.encode(s)}
+    const names=Object.keys(obj); const files=[]; const cdir=[]; let offset=0;
+    for(const name of names){
+      const data=obj[name]; const cdata=data; const crc=crc32(data); const usize=data.length; const csize=cdata.length;
+      const nU8=strToU8(name);
+      const lfh=new Uint8Array(30+nU8.length);
+      lfh.set([0x50,0x4b,0x03,0x04,20,0,0,0,0,0,0,0,0,0,
+        crc&255,(crc>>8)&255,(crc>>16)&255,(crc>>24)&255,
+        csize&255,(csize>>8)&255,(csize>>16)&255,(csize>>24)&255,
+        usize&255,(usize>>8)&255,(usize>>16)&255,(usize>>24)&255,
+        nU8.length&255,(nU8.length>>8)&255,0,0]);
+      lfh.set(nU8,30);
+      files.push(lfh,cdata); const lhoff=offset; offset+=lfh.length+cdata.length;
+      const cen=new Uint8Array(46+nU8.length);
+      cen.set([0x50,0x4b,0x01,0x02,20,0,20,0,0,0,0,0,0,0,0,0,
+        crc&255,(crc>>8)&255,(crc>>16)&255,(crc>>24)&255,
+        csize&255,(csize>>8)&255,(csize>>16)&255,(csize>>24)&255,
+        usize&255,(usize>>8)&255,(usize>>16)&255,(usize>>24)&255,
+        nU8.length&255,(nU8.length>>8)&255,0,0,0,0,0,0,0,0,
+        lhoff&255,(lhoff>>8)&255,(lhoff>>16)&255,(lhoff>>24)&255]);
+      cen.set(nU8,46); cdir.push(cen);
+    }
+    const cdirStart=offset; for(const cen of cdir){ files.push(cen); offset+=cen.length; }
+    const count=names.length; const eocd=new Uint8Array(22);
+    eocd.set([0x50,0x4b,0x05,0x06,0,0,0,0,count&255,(count>>8)&255,count&255,(count>>8)&255,
+      (offset-cdirStart)&255,((offset-cdirStart)>>8)&255,((offset-cdirStart)>>16)&255,((offset-cdirStart)>>24)&255,
+      cdirStart&255,(cdirStart>>8)&255,(cdirStart>>16)&255,(cdirStart>>24)&255,0,0]);
+    files.push(eocd);
+    let total=0; for(const f of files) total+=f.length; const out=new Uint8Array(total);
+    let pos=0; for(const f of files){ out.set(f,pos); pos+=f.length; }
+    return out;
+  })(entries);
+  return new Blob([zipped], {type:'application/zip'});
+}
+
+/** 샘플 ODT 생성: content.xml만 포함한 단순 ODT(Store) */
+/**
+ * 데모용 ODT 3개를 생성한다.
+ * @returns {Promise<File[]>}
+ */
+async function makeSampleODTs(){
+  function zipFromMap(map){
+    const zipped = (function zipSyncLocal(obj){
+      function crc32(buf){var t=zipSyncLocal.t||(zipSyncLocal.t=(function(){var T=new Uint32Array(256);for(let i=0;i<256;i++){let c=i;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;T[i]=c>>>0}return T})()); let c=-1>>>0; for(let j=0;j<buf.length;j++) c=t[(c^buf[j])&255]^(c>>>8); return (c^(-1>>>0))>>>0;}
+      const te=new TextEncoder(); function strToU8(s){return te.encode(s)}
+      const names=Object.keys(obj); const files=[]; const cdir=[]; let offset=0;
+      for(const name of names){
+        const data=obj[name]; const cdata=data; const crc=crc32(data); const usize=data.length; const csize=cdata.length;
+        const nU8=strToU8(name);
+        const lfh=new Uint8Array(30+nU8.length);
+        lfh.set([0x50,0x4b,0x03,0x04,20,0,0,0,0,0,0,0,0,0,
+          crc&255,(crc>>8)&255,(crc>>16)&255,(crc>>24)&255,
+          csize&255,(csize>>8)&255,(csize>>16)&255,(csize>>24)&255,
+          usize&255,(usize>>8)&255,(usize>>16)&255,(usize>>24)&255,
+          nU8.length&255,(nU8.length>>8)&255,0,0]);
+        lfh.set(nU8,30);
+        files.push(lfh,cdata); const lhoff=offset; offset+=lfh.length+cdata.length;
+        const cen=new Uint8Array(46+nU8.length);
+        cen.set([0x50,0x4b,0x01,0x02,20,0,20,0,0,0,0,0,0,0,0,0,
+          crc&255,(crc>>8)&255,(crc>>16)&255,(crc>>24)&255,
+          csize&255,(csize>>8)&255,(csize>>16)&255,(csize>>24)&255,
+          usize&255,(usize>>8)&255,(usize>>16)&255,(usize>>24)&255,
+          nU8.length&255,(nU8.length>>8)&255,0,0,0,0,0,0,0,0,
+          lhoff&255,(lhoff>>8)&255,(lhoff>>16)&255,(lhoff>>24)&255]);
+        cen.set(nU8,46); cdir.push(cen);
+      }
+      const cdirStart=offset; for(const cen of cdir){ files.push(cen); offset+=cen.length; }
+      const count=names.length; const eocd=new Uint8Array(22);
+      eocd.set([0x50,0x4b,0x05,0x06,0,0,0,0,count&255,(count>>8)&255,count&255,(count>>8)&255,
+        (offset-cdirStart)&255,((offset-cdirStart)>>8)&255,((offset-cdirStart)>>16)&255,((offset-cdirStart)>>24)&255,
+        cdirStart&255,(cdirStart>>8)&255,(cdirStart>>16)&255,(cdirStart>>24)&255,0,0]);
+      files.push(eocd); let total=0; for(const f of files) total+=f.length;
+      const out=new Uint8Array(total); let pos=0; for(const f of files){ out.set(f,pos); pos+=f.length; }
+      return out;
+    })(map);
+    return new Blob([zipped], {type:'application/vnd.oasis.opendocument.text'});
+  }
+  const odf1 = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+ xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+ <office:body><office:text>
+   <text:p>안녕하세요 <text:span text:style-name="Bold">굵게</text:span>와 <text:span text:style-name="Italic">기울임</text:span> 테스트</text:p>
+   <text:p>두 번째 문단</text:p>
+ </office:text></office:body>
+</office:document-content>`;
+  const odf2 = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+ xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+ <office:body><office:text>
+   <text:p>리스트 비슷한 것</text:p>
+   <text:p><text:span>• 아이템 1</text:span></text:p>
+   <text:p><text:span>• 아이템 2</text:span></text:p>
+ </office:text></office:body>
+</office:document-content>`;
+  const odf3 = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+ xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+ <office:body><office:text>
+   <text:p>긴 텍스트 테스트 시작</text:p>
+   ${'<text:p>내용 반복</text:p>'.repeat(50)}
+ </office:text></office:body>
+</office:document-content>`;
+
+  const m1 = { 'mimetype': new TextEncoder().encode('application/vnd.oasis.opendocument.text'),
+               'content.xml': new TextEncoder().encode(odf1) };
+  const m2 = { 'mimetype': new TextEncoder().encode('application/vnd.oasis.opendocument.text'),
+               'content.xml': new TextEncoder().encode(odf2) };
+  const m3 = { 'mimetype': new TextEncoder().encode('application/vnd.oasis.opendocument.text'),
+               'content.xml': new TextEncoder().encode(odf3) };
+  const b1 = zipFromMap(m1), b2 = zipFromMap(m2), b3 = zipFromMap(m3);
+  const f1 = new File([b1], 'sample-1.odt', {type:'application/vnd.oasis.opendocument.text'});
+  const f2 = new File([b2], 'sample-2.odt', {type:'application/vnd.oasis.opendocument.text'});
+  const f3 = new File([b3], 'sample-3.odt', {type:'application/vnd.oasis.opendocument.text'});
+  return [f1,f2,f3];
+}
+</script>
+</body>
+</html>
